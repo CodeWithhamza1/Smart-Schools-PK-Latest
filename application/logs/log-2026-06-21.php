@@ -1,0 +1,15 @@
+<?php defined('BASEPATH') OR exit('No direct script access allowed'); ?>
+
+ERROR - 2026-06-21 18:44:47 --> Could not find the language line "not_generated"
+ERROR - 2026-06-21 18:44:57 --> Could not find the language line "not_generated"
+ERROR - 2026-06-21 18:44:58 --> Could not find the language line "not_generated"
+ERROR - 2026-06-21 18:45:02 --> Could not find the language line "not_generated"
+ERROR - 2026-06-21 18:51:37 --> Could not find the language line "student_fees1"
+ERROR - 2026-06-21 18:51:44 --> Could not find the language line "student_fees1"
+ERROR - 2026-06-21 18:58:43 --> Could not find the language line "student1"
+ERROR - 2026-06-21 19:01:40 --> Could not find the language line "file"
+ERROR - 2026-06-21 19:06:12 --> Could not find the language line "academic"
+ERROR - 2026-06-21 19:06:12 --> Could not find the language line "drag"
+ERROR - 2026-06-21 19:06:12 --> Could not find the language line "drag"
+ERROR - 2026-06-21 19:06:12 --> Could not find the language line "drag"
+ERROR - 2026-06-21 19:06:12 --> Could not find the language line "drag"
