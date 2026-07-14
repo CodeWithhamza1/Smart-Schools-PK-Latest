@@ -601,6 +601,18 @@ echo ($currency_symbol . number_format($total_balance_amount - $alot_fee_discoun
                                 <span class="text-danger" id="payment_mode_error"></span>
                             </div>
                         </div>
+                        <div class="form-group" id="bank_account_group">
+                            <label for="bank_account" class="col-sm-3 control-label">Bank Account</label>
+                            <div class="col-sm-9">
+                                <select class="form-control" id="bank_account">
+                                    <option value=""><?php echo $this->lang->line('select'); ?></option>
+                                    <?php if (!empty($bank_accounts)) { foreach ($bank_accounts as $acc) { ?>
+                                        <option value="<?php echo (int)$acc['id']; ?>"><?php echo $acc['account_name']." (".$acc['account_number'].")"; ?></option>
+                                    <?php } } ?>
+                                </select>
+                                <span class="text-danger" id="bank_account_error"></span>
+                            </div>
+                        </div>
                         <div class="form-group">
                             <label for="inputPassword3" class="col-sm-3 control-label"><?php echo $this->lang->line('note'); ?></label>
 
@@ -794,10 +806,11 @@ echo ($currency_symbol . number_format($total_balance_amount - $alot_fee_discoun
         var fee_groups_feetype_id = $('#fee_groups_feetype_id').val();
         var payment_mode = $('input[name="payment_mode_fee"]:checked').val();
         var student_fees_discount_id = $('#discount_group').val();
+        var bank_account_id = $('#bank_account').val();
         $.ajax({
             url: '<?php echo site_url("studentfee/addstudentfee") ?>',
             type: 'post',
-            data: {action: action, student_session_id: student_session_id, date: date, type: feetype, amount: amount, amount_discount: amount_discount, amount_fine: amount_fine, description: description, student_fees_master_id: student_fees_master_id, fee_groups_feetype_id: fee_groups_feetype_id, payment_mode: payment_mode, guardian_phone: guardian_phone, guardian_email: guardian_email, student_fees_discount_id: student_fees_discount_id, parent_app_key: parent_app_key},
+            data: {action: action, student_session_id: student_session_id, date: date, type: feetype, amount: amount, amount_discount: amount_discount, amount_fine: amount_fine, description: description, student_fees_master_id: student_fees_master_id, fee_groups_feetype_id: fee_groups_feetype_id, payment_mode: payment_mode, guardian_phone: guardian_phone, guardian_email: guardian_email, student_fees_discount_id: student_fees_discount_id, parent_app_key: parent_app_key, bank_account_id: bank_account_id},
             dataType: 'json',
             success: function (response) {
                 $this.button('reset');

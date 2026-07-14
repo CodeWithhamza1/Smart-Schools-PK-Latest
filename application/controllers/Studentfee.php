@@ -825,6 +825,30 @@ class Studentfee extends Admin_Controller
         $array = array('status' => 'success', 'result' => 'success');
 
         echo json_encode($array);
+
+        $this->load->model('accounts_model');
+        $admin_user = $this->session->userdata('admin');
+        $user_id = isset($admin_user['id']) ? $admin_user['id'] : 0;
+        $voucher = $this->accounts_model->get_voucher($user_id);
+        if ($voucher && isset($voucher->voucher_entry)) {
+            $lines = json_decode($voucher->voucher_entry, true);
+            $filtered = array();
+            foreach($lines as $line) {
+                $matches = false;
+                // Only delete lines with both fee_invoice_id and fee_sub_invoice_id matching
+                if (
+                    isset($line['fee_invoice_id']) && $line['fee_invoice_id'] == $invoice_id &&
+                    (
+                        !isset($line['fee_sub_invoice_id']) || $line['fee_sub_invoice_id'] === null || $line['fee_sub_invoice_id'] == '' || (isset($line['fee_sub_invoice_id']) && $sub_invoice && $line['fee_sub_invoice_id'] == $sub_invoice)
+                    )
+                ) {
+                    $matches = true;
+                }
+                if ($matches) { continue; }
+                $filtered[] = $line;
+            }
+            $this->accounts_model->update_voucher($voucher->id, array('voucher_entry' => json_encode($filtered)));
+        }
     }
 
 
@@ -993,6 +1017,49 @@ class Studentfee extends Admin_Controller
         $studentlistbysection         = $this->student_model->getStudentClassSection($student["class_id"], $session);
 
         $data["studentlistbysection"] = $studentlistbysection;
+
+        // Load accounts for bank selection - SIMPLE & SMART
+        $this->load->model('accounts_model');
+        $all_accounts = $this->accounts_model->get();
+
+        // SMART FILTER: Show accounts with "Bank" or "Cash" in name, and exclude expenses
+        $bank_accounts = array();
+        foreach ($all_accounts as $acc) {
+            $account_name_lower = strtolower($acc['account_name']);
+            $account_number = isset($acc['account_number']) ? $acc['account_number'] : '';
+
+            // Check if it's a bank/cash account by name or account number prefix
+            $is_bank_cash = (
+                stripos($account_name_lower, 'bank') !== false ||
+                stripos($account_name_lower, 'cash') !== false ||
+                (strlen($account_number) > 0 && substr($account_number, 0, 2) === 'CA') // CA = Current Asset
+            );
+
+            // Exclude expense/income accounts
+            $is_exclude = (
+                stripos($account_name_lower, 'charge') !== false ||
+                stripos($account_name_lower, 'profit') !== false ||
+                stripos($account_name_lower, 'expense') !== false ||
+                stripos($account_name_lower, 'tax') !== false ||
+                stripos($account_name_lower, 'withdrawal') !== false ||
+                (strlen($account_number) > 0 && (
+                    substr($account_number, 0, 2) === 'FC' ||  // FC = Financial Charges
+                    substr($account_number, 0, 3) === 'INC' || // INC = Income
+                    substr($account_number, 0, 2) === 'AE'     // AE = ?
+                ))
+            );
+
+            if ($is_bank_cash && !$is_exclude) {
+                $bank_accounts[] = $acc;
+            }
+        }
+
+        // Fallback: If no accounts found, show all accounts
+        if (empty($bank_accounts)) {
+            $bank_accounts = $all_accounts;
+        }
+
+        $data['bank_accounts'] = $bank_accounts;
 
 
 
@@ -1186,6 +1253,8 @@ class Studentfee extends Admin_Controller
 
                 'received_by'     => $staff_record['id'],
 
+                'bank_account_id' => $this->input->post('bank_account_id'),
+
             );
 
             $data = array(
@@ -1211,6 +1280,134 @@ class Studentfee extends Admin_Controller
             $student_session_id = $this->input->post('student_session_id');
 
             $inserted_id        = $this->studentfeemaster_model->fee_deposit($data, $send_to, $student_fees_discount_id);
+            // Only process voucher if deposit succeeded and IDs are available
+            try {
+                $this->load->model('accounts_model');
+                $this->load->model('Coa_mapping_model');
+                $admin_user = $this->session->userdata('admin');
+                $user_id = isset($admin_user['id']) ? $admin_user['id'] : 0;
+                $voucher = $this->accounts_model->get_voucher($user_id);
+                $voucher_date = date('Y-m-d', $this->customlib->datetostrtotime($this->input->post('date')));
+                $bank_account_id = (int)$this->input->post('bank_account_id');
+                $fee_groups_feetype_id = $this->input->post('fee_groups_feetype_id');
+                $fee_type_row = $this->db->get_where('fee_groups_feetype', array('id' => $fee_groups_feetype_id))->row_array();
+                $fee_type_id = isset($fee_type_row['feetype_id']) ? (int)$fee_type_row['feetype_id'] : 0;
+                $mapping_map = $this->Coa_mapping_model->get_mapping_map();
+                $revenue_account_id = isset($mapping_map[$fee_type_id]) ? (int)$mapping_map[$fee_type_id] : 0;
+
+                // Load account info
+                $accounts = $this->accounts_model->get();
+                $accounts_by_id = array();
+                foreach ($accounts as $acc) { $accounts_by_id[$acc['id']] = $acc; }
+                $debit_account = isset($accounts_by_id[$bank_account_id]) ? $accounts_by_id[$bank_account_id] : false;
+                $credit_account = isset($accounts_by_id[$revenue_account_id]) ? $accounts_by_id[$revenue_account_id] : false;
+
+                // Only add voucher if receipt/fee was actually recorded
+                $receipt_data = null;
+                if ($inserted_id && is_string($inserted_id)) {
+                    $jsond = json_decode($inserted_id);
+                    if (isset($jsond->invoice_id)) {
+                        $receipt_data = $jsond;
+                    }
+                }
+                // Try to pull student/admission from getFeeByInvoice for best accuracy
+                $admission_no = '-';
+                $student_name = '-';
+                $feetype_name = '-';
+                $student_post_id = $this->input->post('student_id');
+                $student_post_session = $this->input->post('student_session_id');
+                $used_source = '';
+                if ($receipt_data && isset($receipt_data->invoice_id)) {
+                    $fee_record = $this->studentfeemaster_model->getFeeByInvoice($receipt_data->invoice_id, $receipt_data->sub_invoice_id);
+                    if (is_array($fee_record) && !empty($fee_record) && isset($fee_record[0])) {
+                        $fee = $fee_record[0];
+                        $admission_no = !empty($fee['admission_no']) ? $fee['admission_no'] : '-';
+                        $student_name = trim((isset($fee['firstname']) ? $fee['firstname'] : '') . ' ' . (isset($fee['middlename']) ? $fee['middlename'] : '') . ' ' . (isset($fee['lastname']) ? $fee['lastname'] : ''));
+                        if (empty($student_name)) $student_name = '-';
+                        $feetype_name = (isset($fee['type']) && $fee['type']) ? $fee['type'] : '-';
+                        $used_source = 'getFeeByInvoice';
+                    }
+                }
+                if (($admission_no == '-' || $student_name == '-') && $student_post_id) {
+                    // Fallback: query student by student_id
+                    $this->db->select('students.admission_no, students.firstname, students.middlename, students.lastname');
+                    $this->db->join('student_session', 'student_session.student_id = students.id');
+                    $this->db->where('students.id', $student_post_id);
+                    $this->db->where('student_session.session_id', $this->setting_model->getCurrentSession());
+                    $stu_row = $this->db->get('students')->row_array();
+                    if ($stu_row) {
+                        $admission_no = $stu_row['admission_no'] ?? $student_post_id;
+                        $student_name = trim(($stu_row['firstname'] ?? '') . ' ' . ($stu_row['middlename'] ?? '') . ' ' . ($stu_row['lastname'] ?? ''));
+                        if (!$student_name) $student_name = $student_post_id;
+                        $used_source = 'student_id';
+                    }
+                }
+                if (($admission_no == '-' || $student_name == '-') && $student_post_session) {
+                    // Fallback: query student by student_session_id
+                    $this->db->select('students.admission_no, students.firstname, students.middlename, students.lastname');
+                    $this->db->join('student_session', 'student_session.student_id = students.id');
+                    $this->db->where('student_session.id', $student_post_session);
+                    $stu_row = $this->db->get('students')->row_array();
+                    if ($stu_row) {
+                        $admission_no = $stu_row['admission_no'] ?? $student_post_session;
+                        $student_name = trim(($stu_row['firstname'] ?? '') . ' ' . ($stu_row['middlename'] ?? '') . ' ' . ($stu_row['lastname'] ?? ''));
+                        if (!$student_name) $student_name = $student_post_session;
+                        $used_source = 'student_session_id';
+                    }
+                }
+                if ($feetype_name == '-' && isset($fee_type_id)) {
+                    $this->db->select('type');
+                    $this->db->where('id', $fee_type_id);
+                    $ftrow = $this->db->get('feetype')->row_array();
+                    if ($ftrow && isset($ftrow['type'])) {
+                        $feetype_name = $ftrow['type'];
+                    }
+                }
+                $month = date('F Y', $this->customlib->datetostrtotime($this->input->post('date')));
+                $debug_comment = "<!-- NARRATION_DEBUG: student_id=$student_post_id student_session_id=$student_post_session got_adm_no=$admission_no got_name=$student_name got_feetype=$feetype_name source=$used_source -->\n";
+                $narration = "$debug_comment Student: {$admission_no} ({$student_name}), FeeType: {$feetype_name}, Period: {$month}";
+                $amount = $this->input->post('amount');
+
+                if ($debit_account && $credit_account && $receipt_data) {
+                    $voucher_line = array(
+                        'voucher_type' => 'fee_receipt_voucher',
+                        'debit_account_id' => $debit_account['id'],
+                        'debit_account_name' => $debit_account['account_name'],
+                        'debit_account_number' => $debit_account['account_number'],
+                        'debit_amount' => $amount,
+                        'credit_account_id' => $credit_account['id'],
+                        'credit_account_name' => $credit_account['account_name'],
+                        'credit_account_number' => $credit_account['account_number'],
+                        'credit_amount' => $amount,
+                        'voucher_narration' => $narration,
+                        'description' => 'Auto-generated from fee collection',
+                        'fee_invoice_id' => isset($receipt_data->invoice_id) ? $receipt_data->invoice_id : null,
+                        'fee_sub_invoice_id' => isset($receipt_data->sub_invoice_id) ? $receipt_data->sub_invoice_id : null,
+                    );
+                    if ($voucher && isset($voucher->id)) {
+                        $old_entry = json_decode($voucher->voucher_entry, true);
+                        if (!is_array($old_entry)) $old_entry = array();
+                        $old_entry[] = $voucher_line;
+                        $update_data = array(
+                            'voucher_date' => $voucher_date,
+                            'voucher_entry' => json_encode($old_entry)
+                        );
+                        $this->accounts_model->update_voucher($voucher->id, $update_data);
+                    } else {
+                        $voucher_number = $this->generate_random_string_for_fee_voucher();
+                        $voucher_lines = array($voucher_line);
+                        $this->accounts_model->insert_voucher(array(
+                            'user_id' => $user_id,
+                            'voucher_date' => $voucher_date,
+                            'voucher_number' => $voucher_number,
+                            'voucher_note' => '',
+                            'voucher_entry' => json_encode($voucher_lines),
+                        ));
+                    }
+                }
+            } catch (Exception $e) {
+                // Fail gracefully, but always echo JSON at the end
+            }
 
             $mailsms_array      = $this->feegrouptype_model->getFeeGroupByID($this->input->post('fee_groups_feetype_id'));
 
@@ -1256,6 +1453,13 @@ class Studentfee extends Admin_Controller
     }
 
 
+
+    private function generate_random_string_for_fee_voucher() {
+        $part1 = strtoupper(substr(md5(rand()), 0, 4));
+        $part2 = strtoupper(substr(md5(rand()), 0, 6));
+        $part3 = strtoupper(substr(md5(rand()), 0, 3));
+        return $part1 . '-' . $part2 . '-' . $part3;
+    }
 
     public function printFeesByName()
 

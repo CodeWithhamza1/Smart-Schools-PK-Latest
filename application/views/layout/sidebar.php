@@ -1133,6 +1133,32 @@ if ($this->module_lib->hasActive('reports')) {
         $this->rbac->hasPrivilege('syllabus_status_report', 'can_view') ||
         $this->rbac->hasPrivilege('teacher_syllabus_status_report', 'can_view'))) {
         ?>
+        <li class="treeview <?php echo set_Topmenu('ChatOfAccount'); ?>">
+            <a href="#">
+                <i class="fa fa-line-chart ftlayer"></i> <span><?php echo 'Chat Of Account'; ?></span> <i class="fa fa-angle-left pull-right"></i>
+            </a>
+            <ul class="treeview-menu">
+                <li class="<?php echo set_Submenu('accounts/all_accounts'); ?>"><a href="<?php echo base_url(); ?>accounts/all_accounts"><i class="fa fa-angle-double-right"></i> <?php echo "All Accounts" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/opening_balance'); ?>"><a href="<?php echo base_url(); ?>accounts/opening_balance"><i class="fa fa-angle-double-right"></i> <?php echo "Opening Balance" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/account_balances'); ?>"><a href="<?php echo base_url(); ?>accounts/account_balances"><i class="fa fa-angle-double-right"></i> <?php echo "Account Balances" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/bank_payments'); ?>"><a href="<?php echo base_url(); ?>accounts/bank_payments"><i class="fa fa-angle-double-right"></i> <?php echo "Bank Payments" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/bank_receipts'); ?>"><a href="<?php echo base_url(); ?>accounts/bank_receipts"><i class="fa fa-angle-double-right"></i> <?php echo "Bank Receipts" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/bank_transfers'); ?>"><a href="<?php echo base_url(); ?>accounts/bank_transfers"><i class="fa fa-angle-double-right"></i> <?php echo "Transfers" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/reconciliation'); ?>"><a href="<?php echo base_url(); ?>accounts/reconciliation"><i class="fa fa-angle-double-right"></i> <?php echo "Reconciliation" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/fee_collection_report'); ?>"><a href="<?php echo base_url(); ?>accounts/fee_collection_report"><i class="fa fa-angle-double-right"></i> <?php echo "Collection Report" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/create_voucher'); ?>"><a href="<?php echo base_url(); ?>accounts/create_voucher"><i class="fa fa-angle-double-right"></i> <?php echo "Create Voucher" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/create_payable'); ?>"><a href="<?php echo base_url(); ?>accounts/create_payable"><i class="fa fa-angle-double-right"></i> <?php echo "Create Payable" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/journal_entries'); ?>"><a href="<?php echo base_url(); ?>accounts/journal_entries"><i class="fa fa-angle-double-right"></i> <?php echo "Journal" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/journal_new_list'); ?>"><a href="<?php echo base_url(); ?>accounts/journal_new_list"><i class="fa fa-angle-double-right"></i> <?php echo "Journal New" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/trial_balance'); ?>"><a href="<?php echo base_url(); ?>accounts/trial_balance"><i class="fa fa-angle-double-right"></i> <?php echo "Trial Balance" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/trial_balance_new'); ?>"><a href="<?php echo base_url(); ?>accounts/trial_balance_new"><i class="fa fa-angle-double-right"></i> <?php echo "Trial Balance New" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/balance_sheet'); ?>"><a href="<?php echo base_url(); ?>accounts/balance_sheet"><i class="fa fa-angle-double-right"></i> <?php echo "Balance Sheet" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/report_by_group'); ?>"><a href="<?php echo base_url(); ?>accounts/report_by_group"><i class="fa fa-angle-double-right"></i> <?php echo "Report by Account Type" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/report_by_account'); ?>"><a href="<?php echo base_url(); ?>accounts/report_by_account"><i class="fa fa-angle-double-right"></i> <?php echo "Report by Account" ?></a></li>
+                <li class="<?php echo set_Submenu('accounts/coa_mapping'); ?>"><a href="<?php echo base_url(); ?>accounts/coa_mapping"><i class="fa fa-angle-double-right"></i> <?php echo "COA Mapping" ?></a></li>
+
+            </ul>
+        </li>
                     <li class="treeview <?php echo set_Topmenu('Reports'); ?>">
                         <a href="#">
                             <i class="fa fa-line-chart ftlayer"></i> <span><?php echo $this->lang->line('reports'); ?></span> <i class="fa fa-angle-left pull-right"></i>
