@@ -842,7 +842,7 @@
             </div>
             <div class="modal-body upload_logo_body">
                 <!-- ==== -->
-                <form class="box_upload boxupload has-advanced-upload" method="post" action="<?php echo site_url('schsettings/ajax_editlogo') ?>" enctype="multipart/form-data">
+                <form class="box_upload boxupload has-advanced-upload" method="post" action="<?php echo site_url('schsettings/ajax_editadmin_adminlogo') ?>" enctype="multipart/form-data">
                     <input value="<?php echo $result->id ?>" type="hidden" name="id" id="id_logo_admin"/>
                     <input type="file" name="file" id="file_admin">
                     <!-- Drag and Drop container-->
@@ -867,7 +867,7 @@
             </div>
             <div class="modal-body upload_logo_body">
                 <!-- ==== -->
-                <form class="box_upload boxupload has-advanced-upload" method="post" action="<?php echo site_url('schsettings/ajax_editlogo') ?>" enctype="multipart/form-data">
+                <form class="box_upload boxupload has-advanced-upload" method="post" action="<?php echo site_url('schsettings/ajax_applogo') ?>" enctype="multipart/form-data">
                     <input value="<?php echo $result->id ?>" type="hidden" name="id" id="id_app_logo"/>
                     <input type="file" name="file" id="file_applogo">
                     <!-- Drag and Drop container-->
@@ -893,7 +893,7 @@
             </div>
             <div class="modal-body upload_logo_body">
                 <!-- ==== -->
-                <form class="box_upload boxupload has-advanced-upload" method="post" action="<?php echo site_url('schsettings/ajax_editlogo') ?>" enctype="multipart/form-data">
+                <form class="box_upload boxupload has-advanced-upload" method="post" action="<?php echo site_url('schsettings/ajax_editadmin_smalllogo') ?>" enctype="multipart/form-data">
                     <input value="<?php echo $result->id ?>" type="hidden" name="id" id="id_logo_small"/>
                     <input type="file" name="file" id="file_small">
                     <!-- Drag and Drop container-->
@@ -1268,10 +1268,10 @@
             var fd = new FormData();
 
             fd.append('file', file[0]);
-            fd.append("id", $('#id_logo_small').val());
+            fd.append("id", $('#id_logo_admin').val());
             fd.append("logo_type", logo_type);
 
-            uploadadminlData(fd);
+            uploadadminData(fd);
         });
 
         // Open file selector on div click
@@ -1286,7 +1286,7 @@
             var files = $('#file_admin')[0].files[0];
 
             fd.append('file', files);
-            fd.append("id", $('#id_logo_small').val());
+            fd.append("id", $('#id_logo_admin').val());
             fd.append("logo_type", logo_type);
             uploadadminData(fd);
         });
@@ -1385,7 +1385,7 @@
             fd.append("id", $('#id_app_logo').val());
             // fd.append("logo_type", logo_type);
 
-            uploadSmallData(fd);
+            uploadAppData(fd);
         });
 
         // Open file selector on div click

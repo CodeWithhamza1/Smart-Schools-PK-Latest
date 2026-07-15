@@ -29,13 +29,30 @@ class Schsettings extends Admin_Controller
 
         $fileInfo  = pathinfo($_FILES[$fieldName]['name']);
         $extension = strtolower($fileInfo['extension']);
-        $img_name  = $id . '.' . $extension;
+
+        // A new public URL is required for every replacement. Reusing names such
+        // as 1.png leaves browsers and intermediate caches showing the old logo.
+        $img_name = 'logo-' . $id . '-' . str_replace('.', '', uniqid('', true)) . '.' . $extension;
 
         if (!move_uploaded_file($_FILES[$fieldName]["tmp_name"], rtrim($targetDir, '/\\') . DIRECTORY_SEPARATOR . $img_name)) {
             return array('status' => false, 'error' => $this->lang->line('something_went_wrong'));
         }
 
         return array('status' => true, 'file_name' => $img_name);
+    }
+
+    private function removeReplacedLogo($targetDir, $oldFileName, $newFileName)
+    {
+        if (empty($oldFileName) || $oldFileName === $newFileName || $oldFileName === 'images.png') {
+            return;
+        }
+
+        // Database values should contain a filename only. basename() ensures a
+        // stale or malformed value can never delete a file outside this folder.
+        $oldPath = rtrim($targetDir, '/\\') . DIRECTORY_SEPARATOR . basename($oldFileName);
+        if (is_file($oldPath)) {
+            @unlink($oldPath);
+        }
     }
 
     private function sanitize_post_text($key, $default = '')
@@ -118,7 +135,10 @@ class Schsettings extends Admin_Controller
             echo json_encode($array);
         } else {
             $id = $this->sanitize_post_int('id');
-            $upload = $this->saveLogoFile('file', FCPATH . 'uploads/school_content/logo', $id);
+            $target_dir = FCPATH . 'uploads/school_content/logo';
+            $setting = $this->setting_model->getSetting();
+            $old_file = isset($setting->image) ? $setting->image : '';
+            $upload = $this->saveLogoFile('file', $target_dir, $id);
             if (!$upload['status']) {
                 $array = array('success' => false, 'error' => array('file' => $upload['error']));
                 echo json_encode($array);
@@ -127,6 +147,7 @@ class Schsettings extends Admin_Controller
             $img_name    = $upload['file_name'];
             $data_record = array('id' => $id, 'image' => $img_name);
             $this->setting_model->add($data_record);
+            $this->removeReplacedLogo($target_dir, $old_file, $img_name);
             $array = array('success' => true, 'error' => '', 'message' => $this->lang->line('success_message'));
             echo json_encode($array);
         }
@@ -145,7 +166,10 @@ class Schsettings extends Admin_Controller
             echo json_encode($array);
         } else {
             $id = $this->sanitize_post_int('id');
-            $upload = $this->saveLogoFile('file', FCPATH . 'uploads/school_content/admin_small_logo', $id);
+            $target_dir = FCPATH . 'uploads/school_content/admin_small_logo';
+            $setting = $this->setting_model->getSetting();
+            $old_file = isset($setting->admin_small_logo) ? $setting->admin_small_logo : '';
+            $upload = $this->saveLogoFile('file', $target_dir, $id);
             if (!$upload['status']) {
                 $array = array('success' => false, 'error' => array('file' => $upload['error']));
                 echo json_encode($array);
@@ -154,6 +178,7 @@ class Schsettings extends Admin_Controller
             $img_name    = $upload['file_name'];
             $data_record = array('id' => $id, 'admin_small_logo' => $img_name);
             $this->setting_model->add($data_record);
+            $this->removeReplacedLogo($target_dir, $old_file, $img_name);
             $array = array('success' => true, 'error' => '', 'message' => $this->lang->line('success_message'));
             echo json_encode($array);
         }
@@ -172,7 +197,10 @@ class Schsettings extends Admin_Controller
             echo json_encode($array);
         } else {
             $id = $this->sanitize_post_int('id');
-            $upload = $this->saveLogoFile('file', FCPATH . 'uploads/school_content/admin_logo', $id);
+            $target_dir = FCPATH . 'uploads/school_content/admin_logo';
+            $setting = $this->setting_model->getSetting();
+            $old_file = isset($setting->admin_logo) ? $setting->admin_logo : '';
+            $upload = $this->saveLogoFile('file', $target_dir, $id);
             if (!$upload['status']) {
                 $array = array('success' => false, 'error' => array('file' => $upload['error']));
                 echo json_encode($array);
@@ -181,6 +209,7 @@ class Schsettings extends Admin_Controller
             $img_name    = $upload['file_name'];
             $data_record = array('id' => $id, 'admin_logo' => $img_name);
             $this->setting_model->add($data_record);
+            $this->removeReplacedLogo($target_dir, $old_file, $img_name);
             $array = array('success' => true, 'error' => '', 'message' => $this->lang->line('success_message'));
             echo json_encode($array);
         }
@@ -199,7 +228,10 @@ class Schsettings extends Admin_Controller
             $this->load->view('layout/footer', $data);
         } else {
             if (isset($_FILES["file"]) && !empty($_FILES['file']['name'])) {
-                $upload = $this->saveLogoFile('file', FCPATH . 'uploads/school_content/logo', $id);
+                $target_dir = FCPATH . 'uploads/school_content/logo';
+                $setting = $this->setting_model->getSetting();
+                $old_file = isset($setting->image) ? $setting->image : '';
+                $upload = $this->saveLogoFile('file', $target_dir, $id);
                 if (!$upload['status']) {
                     $this->session->set_flashdata('msg', '<div class="alert alert-danger alert-left">' . $upload['error'] . '</div>');
                     redirect('schsettings/index');
@@ -208,6 +240,7 @@ class Schsettings extends Admin_Controller
             }
             $data_record = array('id' => $id, 'image' => $img_name);
             $this->setting_model->add($data_record);
+            $this->removeReplacedLogo($target_dir, $old_file, $img_name);
             $this->session->set_flashdata('msg', '<div class="alert alert-left">' . $this->lang->line('update_message') . '</div>');
             redirect('schsettings/index');
         }
@@ -487,7 +520,10 @@ class Schsettings extends Admin_Controller
         } else {
 
             $id = $this->sanitize_post_int('id');
-            $upload = $this->saveLogoFile('file', FCPATH . 'uploads/school_content/logo/app_logo', $id);
+            $target_dir = FCPATH . 'uploads/school_content/logo/app_logo';
+            $setting = $this->setting_model->getSetting();
+            $old_file = isset($setting->app_logo) ? $setting->app_logo : '';
+            $upload = $this->saveLogoFile('file', $target_dir, $id);
             if (!$upload['status']) {
                 $array = array('success' => false, 'error' => array('file' => $upload['error']));
                 echo json_encode($array);
@@ -498,6 +534,7 @@ class Schsettings extends Admin_Controller
             $data_record = array('id' => $id, 'app_logo' => $img_name);
 
             $this->setting_model->add($data_record);
+            $this->removeReplacedLogo($target_dir, $old_file, $img_name);
             $array = array('success' => true, 'error' => '', 'message' => 'Record Updated Successfully');
             echo json_encode($array);
         }
