@@ -124,6 +124,7 @@ class Examgroup_model extends MY_Model {
             $action = "Update";
             $record_id = $data['id'];
             $this->log($message, $record_id, $action);
+            return $record_id;
         } else {
             $this->db->trans_start(); # Starting Transaction
             $this->db->trans_strict(false); # See Note 01. If you wish can remove as well
@@ -162,7 +163,7 @@ class Examgroup_model extends MY_Model {
                 # Everything is Perfect.
                 # Committing data to the database.
                 $this->db->trans_commit();
-                return true;
+                return $insert_id;
             }
         }
     }

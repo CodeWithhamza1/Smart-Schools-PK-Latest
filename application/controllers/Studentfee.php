@@ -30,6 +30,20 @@ class Studentfee extends Admin_Controller
         $this->sch_setting_detail = $this->setting_model->getSetting();
     }
 
+    private function getStudentPushKeysBySession($student_session_id)
+    {
+        if (empty($student_session_id)) {
+            return false;
+        }
+
+        return $this->db->select('students.app_key, students.parent_app_key')
+            ->from('student_session')
+            ->join('students', 'students.id = student_session.student_id')
+            ->where('student_session.id', $student_session_id)
+            ->get()
+            ->row();
+    }
+
 
 
     public function index()
@@ -1438,7 +1452,10 @@ class Studentfee extends Admin_Controller
 
             $mailsms_array->email          = $email;
 
-            $mailsms_array->parent_app_key = $parent_app_key;
+            $push_keys = $this->getStudentPushKeysBySession($student_session_id);
+            $mailsms_array->student_session_id = $student_session_id;
+            $mailsms_array->app_key = !empty($push_keys) ? $push_keys->app_key : '';
+            $mailsms_array->parent_app_key = !empty($push_keys) ? $push_keys->parent_app_key : $parent_app_key;
 
 
 
@@ -2010,7 +2027,10 @@ class Studentfee extends Admin_Controller
 
                 $mailsms_array->email          = $email;
 
-                $mailsms_array->parent_app_key = $parent_app_key;
+                $push_keys = $this->getStudentPushKeysBySession($student_session_id);
+                $mailsms_array->student_session_id = $student_session_id;
+                $mailsms_array->app_key = !empty($push_keys) ? $push_keys->app_key : '';
+                $mailsms_array->parent_app_key = !empty($push_keys) ? $push_keys->parent_app_key : $parent_app_key;
 
                 $this->mailsmsconf->mailsms('fee_submission', $mailsms_array);
             }

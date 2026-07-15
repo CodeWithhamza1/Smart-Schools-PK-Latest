@@ -458,9 +458,10 @@ class Examgroup extends Admin_Controller
             }
 
             $inserted_id = $this->examgroup_model->add_exam($postarray);
-            $exam_data   = $this->examgroup_model->getExamByID($exam_id);
-            if ($is_publish) {
-                $exam_students = $this->examgroupstudent_model->searchExamStudentsByExam($exam_id);
+            $current_exam_id = $inserted_id ? $inserted_id : $exam_id;
+            $exam_data   = $this->examgroup_model->getExamByID($current_exam_id);
+            if ($is_publish && $current_exam_id) {
+                $exam_students = $this->examgroupstudent_model->searchExamStudentsByExam($current_exam_id);
                 $student_exams = array('exam' => $exam_data, 'exam_result' => $exam_students);
                 $s             = $this->mailsmsconf->mailsms('exam_result', $student_exams);
             }

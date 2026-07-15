@@ -179,6 +179,11 @@ class Subjectattendence extends Admin_Controller {
                 foreach ($session_ary as $key => $value) {
                     $checkForUpdate = $this->input->post('attendance_id' . $value);
                     if ($checkForUpdate != 0) {
+                        $previous_attendance = $this->db->select('attendence_type_id')
+                            ->where('id', $checkForUpdate)
+                            ->get('student_subject_attendances')
+                            ->row_array();
+                        $previous_attendance_type_id = isset($previous_attendance['attendence_type_id']) ? (int) $previous_attendance['attendence_type_id'] : 0;
                         if (isset($holiday)) {
                             $arr = array(
                                 'id' => $checkForUpdate,
@@ -199,6 +204,12 @@ class Subjectattendence extends Admin_Controller {
                             );
                         }
                         $update_student_list[] = $arr;
+                        $absent_config = (int) $this->config_attendance['absent'];
+                        if (!isset($holiday)
+                            && (int) $arr['attendence_type_id'] === $absent_config
+                            && $previous_attendance_type_id !== $absent_config) {
+                            $absent_student_list[] = $value;
+                        }
                     } else {
                         if (isset($holiday)) {
                             $arr = array(
@@ -220,7 +231,7 @@ class Subjectattendence extends Admin_Controller {
                         }
                         $insert_student_list[] = $arr;
                         $absent_config = $this->config_attendance['absent'];
-                        if ($arr['attendence_type_id'] == $absent_config) {
+                        if (!isset($holiday) && (int) $arr['attendence_type_id'] === (int) $absent_config) {
                             $absent_student_list[] = $value;
                         }
                     }

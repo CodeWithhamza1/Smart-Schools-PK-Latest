@@ -9,6 +9,7 @@ class Pushnotification {
     private $projectId = 'unique-school-shama-chap';
     private $fcmUrl;
     private $accessToken;
+    private $serviceAccount;
     
     public function __construct() {
         $this->CI = &get_instance();
@@ -16,6 +17,32 @@ class Pushnotification {
         $this->fcmUrl = "https://fcm.googleapis.com/v1/projects/{$this->projectId}/messages:send";
     }
     
+    private function loadServiceAccount() {
+        if ($this->serviceAccount) {
+            return $this->serviceAccount;
+        }
+
+        if (!file_exists($this->serviceAccountPath)) {
+            log_message('error', 'Firebase service account file not found at: ' . $this->serviceAccountPath);
+            return false;
+        }
+
+        $serviceAccount = json_decode(file_get_contents($this->serviceAccountPath), true);
+
+        if (!$serviceAccount || !isset($serviceAccount['private_key']) || !isset($serviceAccount['client_email'])) {
+            log_message('error', 'Invalid Firebase service account JSON file');
+            return false;
+        }
+
+        if (!empty($serviceAccount['project_id'])) {
+            $this->projectId = $serviceAccount['project_id'];
+            $this->fcmUrl = 'https://fcm.googleapis.com/v1/projects/' . $this->projectId . '/messages:send';
+        }
+
+        $this->serviceAccount = $serviceAccount;
+        return $this->serviceAccount;
+    }
+
     /**
      * Get OAuth 2.0 access token using service account
      */
@@ -23,16 +50,9 @@ class Pushnotification {
         if ($this->accessToken) {
             return $this->accessToken;
         }
-        
-        if (!file_exists($this->serviceAccountPath)) {
-            log_message('error', 'Firebase service account file not found at: ' . $this->serviceAccountPath);
-            return false;
-        }
-        
-        $serviceAccount = json_decode(file_get_contents($this->serviceAccountPath), true);
-        
-        if (!$serviceAccount || !isset($serviceAccount['private_key']) || !isset($serviceAccount['client_email'])) {
-            log_message('error', 'Invalid Firebase service account JSON file');
+
+        $serviceAccount = $this->loadServiceAccount();
+        if (!$serviceAccount) {
             return false;
         }
         
@@ -130,44 +150,128 @@ class Pushnotification {
     private function base64urlEncode($data) {
         return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
-    
+
+    private function normalizeData($data) {
+        $normalized = array();
+        foreach ($data as $key => $value) {
+            if ($value === null) {
+                $value = '';
+            } elseif (is_bool($value)) {
+                $value = $value ? '1' : '0';
+            } elseif (is_array($value) || is_object($value)) {
+                $value = json_encode($value);
+            }
+            $normalized[$key] = (string) $value;
+        }
+        return $normalized;
+    }
+
+    private function clearInvalidToken($token) {
+        if ($token === '') {
+            return 0;
+        }
+
+        $this->CI->db->where('app_key', $token)->update('students', array('app_key' => null));
+        $app_key_rows = $this->CI->db->affected_rows();
+        $this->CI->db->where('parent_app_key', $token)->update('students', array('parent_app_key' => null));
+        $parent_app_key_rows = $this->CI->db->affected_rows();
+        $cleared_rows = $app_key_rows + $parent_app_key_rows;
+        log_message('info', 'Removed invalid FCM token from students table: ' . substr($token, 0, 20) . '..., rows: ' . $cleared_rows);
+        return $cleared_rows;
+    }
+
+    private function getFcmErrorCode($response) {
+        if (empty($response['error'])) {
+            return null;
+        }
+        if (!empty($response['error']['details']) && is_array($response['error']['details'])) {
+            foreach ($response['error']['details'] as $detail) {
+                if (!empty($detail['errorCode'])) {
+                    return $detail['errorCode'];
+                }
+            }
+        }
+        if (!empty($response['error']['status'])) {
+            return $response['error']['status'];
+        }
+        return null;
+    }
+
+    private function isInvalidTokenResponse($response) {
+        if (empty($response['error'])) {
+            return false;
+        }
+
+        $error = $response['error'];
+        $status = isset($error['status']) ? $error['status'] : '';
+        $message = isset($error['message']) ? $error['message'] : '';
+        $fcm_error_code = $this->getFcmErrorCode($response);
+
+        if (in_array($status, array('NOT_FOUND', 'UNREGISTERED'), true)
+            || in_array($fcm_error_code, array('SENDER_ID_MISMATCH', 'UNREGISTERED', 'NOT_FOUND', 'INVALID_ARGUMENT'), true)) {
+            return true;
+        }
+
+        return stripos($message, 'registration token') !== false
+            || stripos($message, 'not a valid FCM registration token') !== false
+            || stripos($message, 'Requested entity was not found') !== false
+            || stripos($message, 'SENDER_ID_MISMATCH') !== false
+            || stripos($message, 'invalid registration token') !== false;
+    }
 
     public function send($tokens, $msg, $action = "") {
+        $report = $this->sendWithReport($tokens, $msg, $action);
+        return !empty($report['success']);
+    }
+
+    public function sendWithReport($tokens, $msg, $action = "") {
+        if (is_array($tokens)) {
+            return $this->sendBulk($tokens, $msg, $action);
+        }
+
+        $tokens = trim((string) $tokens);
+        if ($tokens === '') {
+            return array('success' => false, 'driver' => 'http_v1', 'http_code' => 0, 'error' => 'empty_token', 'message' => 'FCM token is empty', 'project_id' => $this->projectId, 'endpoint' => $this->fcmUrl, 'token_prefix' => '', 'response' => null, 'fcm_error_code' => null, 'invalid_token_cleared_rows' => 0);
+        }
+
         // Get access token for authentication
         $accessToken = $this->getAccessToken();
         if (!$accessToken) {
             log_message('error', 'Unable to get Firebase access token for push notification');
-            return false;
+            return array('success' => false, 'driver' => 'http_v1', 'http_code' => 0, 'error' => 'oauth_failed', 'message' => 'Unable to get Firebase access token', 'project_id' => $this->projectId, 'endpoint' => $this->fcmUrl, 'token_prefix' => substr($tokens, 0, 20) . '...', 'response' => null, 'fcm_error_code' => null, 'invalid_token_cleared_rows' => 0);
         }
-        
+
+        $title = isset($msg['title']) ? (string) $msg['title'] : '';
+        $body = isset($msg['body']) ? (string) $msg['body'] : '';
+
         // Prepare notification data (keeping your original structure)
-        $notificationData = [
-            'title' => $msg['title'],
-            'body' => $msg['body'],
+        $notificationData = $this->normalizeData([
+            'title' => $title,
+            'body' => $body,
             'action' => $action,
             'sound' => 'default' // Changed from 'mySound' to 'default' for better compatibility
-        ];
+        ]);
         
         // Build the FCM message in v1 API format
         $message = [
             'message' => [
                 'token' => $tokens, // Single token (same as your 'to' field)
                 'notification' => [
-                    'title' => $msg['title'],
-                    'body' => $msg['body']
+                    'title' => $title,
+                    'body' => $body
                 ],
-                'data' => [
-                    'title' => $msg['title'],
-                    'body' => $msg['body'],
+                'data' => $this->normalizeData([
+                    'title' => $title,
+                    'body' => $body,
                     'action' => $action,
                     'sound' => 'default',
                     'click_action' => $action
-                ],
+                ]),
                 // Android specific configuration
                 'android' => [
                     'notification' => [
-                        'title' => $msg['title'],
-                        'body' => $msg['body'],
+                        'title' => $title,
+                        'body' => $body,
                         'sound' => 'default',
                         'click_action' => $action,
                         'channel_id' => 'default'
@@ -180,8 +284,8 @@ class Pushnotification {
                     'payload' => [
                         'aps' => [
                             'alert' => [
-                                'title' => $msg['title'],
-                                'body' => $msg['body']
+                                'title' => $title,
+                                'body' => $body
                             ],
                             'sound' => 'default'
                         ]
@@ -213,22 +317,18 @@ class Pushnotification {
         // Handle errors and return results
         if ($curlError) {
             log_message('error', 'CURL error sending FCM notification: ' . $curlError);
-            return false;
+            return array('success' => false, 'driver' => 'http_v1', 'http_code' => 0, 'error' => 'curl_error', 'message' => $curlError, 'project_id' => $this->projectId, 'endpoint' => $this->fcmUrl, 'token_prefix' => substr($tokens, 0, 20) . '...', 'response' => null, 'fcm_error_code' => null, 'invalid_token_cleared_rows' => 0);
         }
-        
+
+        $response = json_decode($result, true);
+        $fcm_error_code = $this->getFcmErrorCode($response);
         if ($httpCode == 200) {
-            $response = json_decode($result, true);
-            if (isset($response['error'])) {
-                log_message('error', 'FCM API Error: ' . json_encode($response['error']));
-                return false;
-            }
-            
-            // Success - log it
-            log_message('info', 'Push notification sent successfully to token: ' . substr($tokens, 0, 20) . '...');
-            return true;
+            log_message('info', 'Firebase HTTP v1 push notification sent successfully to token: ' . substr($tokens, 0, 20) . '...');
+            return array('success' => true, 'driver' => 'http_v1', 'http_code' => $httpCode, 'project_id' => $this->projectId, 'endpoint' => $this->fcmUrl, 'token_prefix' => substr($tokens, 0, 20) . '...', 'response' => $response, 'fcm_error_code' => null, 'invalid_token_cleared_rows' => 0);
         } else {
             log_message('error', 'FCM HTTP Error: ' . $httpCode . ' - Response: ' . $result);
-            return false;
+            $invalid_token_cleared_rows = $this->isInvalidTokenResponse($response) ? $this->clearInvalidToken($tokens) : 0;
+            return array('success' => false, 'driver' => 'http_v1', 'http_code' => $httpCode, 'error' => 'fcm_error', 'message' => isset($response['error']['message']) ? $response['error']['message'] : 'Firebase request failed', 'project_id' => $this->projectId, 'endpoint' => $this->fcmUrl, 'token_prefix' => substr($tokens, 0, 20) . '...', 'response' => $response, 'raw_response' => $result, 'fcm_error_code' => $fcm_error_code, 'invalid_token_cleared_rows' => $invalid_token_cleared_rows);
         }
     }
     
@@ -243,13 +343,15 @@ class Pushnotification {
         $successCount = 0;
         
         foreach ($tokenArray as $token) {
-            $result = $this->send($token, $msg, $action);
+            $result = $this->sendWithReport($token, $msg, $action);
+            $success = !empty($result['success']);
             $results[] = [
                 'token' => substr($token, 0, 20) . '...',
-                'success' => $result
+                'success' => $success,
+                'report' => $result,
             ];
             
-            if ($result) {
+            if ($success) {
                 $successCount++;
             }
             
@@ -260,7 +362,8 @@ class Pushnotification {
         log_message('info', "Bulk notification completed. Success: $successCount/" . count($tokenArray));
         return [
             'total' => count($tokenArray),
-            'success' => $successCount,
+            'success' => $successCount > 0,
+            'successful' => $successCount,
             'failed' => count($tokenArray) - $successCount,
             'details' => $results
         ];

@@ -21,6 +21,46 @@ class Smsgateway {
         $this->sch_setting = $this->_CI->setting_model->get();
     }
 
+    private function getPushSummaryDetail($label, $token, $success, $report) {
+        return array(
+            'label' => $label,
+            'token_prefix' => isset($report['token_prefix']) ? $report['token_prefix'] : substr($token, 0, 20) . '...',
+            'success' => $success,
+            'driver' => isset($report['driver']) ? $report['driver'] : 'unknown',
+            'http_code' => isset($report['http_code']) ? $report['http_code'] : null,
+            'error' => isset($report['error']) ? $report['error'] : null,
+            'fcm_error_code' => isset($report['fcm_error_code']) ? $report['fcm_error_code'] : null,
+            'invalid_token_cleared_rows' => isset($report['invalid_token_cleared_rows']) ? $report['invalid_token_cleared_rows'] : 0,
+            'message' => isset($report['message']) ? $report['message'] : null,
+        );
+    }
+
+    private function sendModulePushTargets($targets, $push_array, $summary_label) {
+        $this->_CI->load->library('pushnotification');
+        $summary = array('requested' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0, 'details' => array());
+
+        foreach ($targets as $label => $token) {
+            $token = trim((string) $token);
+            if ($token === '') {
+                $summary['skipped']++;
+                continue;
+            }
+
+            $summary['requested']++;
+            $report = $this->_CI->pushnotification->sendWithReport($token, $push_array, 'mail_sms');
+            $success = !empty($report['success']);
+            if ($success) {
+                $summary['sent']++;
+            } else {
+                $summary['failed']++;
+            }
+            $summary['details'][] = $this->getPushSummaryDetail($label, $token, $success, $report);
+        }
+
+        log_message('info', $summary_label . ': ' . json_encode($summary));
+        return $summary;
+    }
+
     public function sentNotification($send_to, $template = '', $detail) {
         $this->_CI->load->library('pushnotification');
         $msg = $this->getContent($detail, $template);
@@ -372,31 +412,28 @@ class Smsgateway {
         }
     }
 
-    public function sentAbsentStudentNotification($detail, $template) {
-
+    public function sentAbsentStudentNotification($detail, $template, $subject = 'Absent Student') {
         $msg = $this->getAbsentStudentContent($detail, $template);
         $push_array = array(
-            'title' => 'Absent Student',
+            'title' => ($subject != '') ? $subject : 'Absent Student',
             'body' => $msg,
         );
-        if ($detail['parent_app_key'] != "") {
-            $this->_CI->pushnotification->send($detail['parent_app_key'], $push_array, "mail_sms");
-        }
+        return $this->sendModulePushTargets(array(
+            'parent_app_key' => isset($detail['parent_app_key']) ? $detail['parent_app_key'] : '',
+            'app_key' => isset($detail['app_key']) ? $detail['app_key'] : '',
+        ), $push_array, 'Absent student push notification summary');
     }
 
-    public function sentExamResultNotification($detail, $template) {
-
+    public function sentExamResultNotification($detail, $template, $subject = 'Exam Result') {
         $msg = $this->getStudentResultContent($detail, $template);
         $push_array = array(
-            'title' => 'Exam Result',
+            'title' => ($subject != '') ? $subject : 'Exam Result',
             'body' => $msg,
         );
-        if ($detail['app_key'] != "") {
-            $this->_CI->pushnotification->send($detail['app_key'], $push_array, "mail_sms");
-        }
-        if ($detail['parent_app_key'] != "") {
-            $this->_CI->pushnotification->send($detail['parent_app_key'], $push_array, "mail_sms");
-        }
+        return $this->sendModulePushTargets(array(
+            'parent_app_key' => isset($detail['parent_app_key']) ? $detail['parent_app_key'] : '',
+            'app_key' => isset($detail['app_key']) ? $detail['app_key'] : '',
+        ), $push_array, 'Exam result push notification summary');
     }
 
     public function sentExamResultSMS($detail, $template) {
@@ -559,17 +596,28 @@ class Smsgateway {
         $this->sendSMS($send_to,"", $msg);        return true;
     }
 
-    public function sentHomeworkStudentNotification($detail, $template) {
+    public function sentHomeworkStudentNotification($detail, $template, $subject = 'Homework') {
+        $this->_CI->load->library('pushnotification');
+        $summary = array('requested' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0, 'details' => array());
         foreach ($detail as $student_key => $student_value) {
             $msg = $this->getHomeworkStudentContent($detail[$student_key], $template);
             $push_array = array(
-                'title' => 'Homework',
+                'title' => ($subject != '') ? $subject : 'Homework',
                 'body' => $msg
             );
-            if ($student_value['app_key'] != "") {
-                $this->_CI->pushnotification->send($student_value['app_key'], $push_array, "mail_sms");
+            $token = isset($student_value['app_key']) ? trim((string) $student_value['app_key']) : '';
+            if ($token === '') {
+                $summary['skipped']++;
+                continue;
             }
+            $report = $this->_CI->pushnotification->sendWithReport($token, $push_array, 'mail_sms');
+            $success = !empty($report['success']);
+            $summary['requested']++;
+            $summary[$success ? 'sent' : 'failed']++;
+            $summary['details'][] = $this->getPushSummaryDetail('homework_' . $student_key, $token, $success, $report);
         }
+        log_message('info', 'Homework push notification summary: ' . json_encode($summary));
+        return $summary;
     }
 
      public function sentOnlineexamStudentNotification($detail, $template) {
@@ -600,15 +648,27 @@ class Smsgateway {
         }
     }
 
-    public function sentAddFeeNotification($detail, $template) {
+    public function sentAddFeeNotification($detail, $template, $subject = 'Fees Notification') {
+        $this->_CI->load->library('pushnotification');
+        if (empty($detail->student_session_id)) {
+            $detail->student_session_id = 0;
+        }
+        if ((empty($detail->app_key) || empty($detail->parent_app_key)) && $detail->student_session_id) {
+            $student = $this->_CI->db->select('students.app_key, students.parent_app_key')->from('student_session')->join('students', 'students.id = student_session.student_id')->where('student_session.id', $detail->student_session_id)->get()->row();
+            if ($student) {
+                $detail->app_key = !empty($detail->app_key) ? $detail->app_key : $student->app_key;
+                $detail->parent_app_key = !empty($detail->parent_app_key) ? $detail->parent_app_key : $student->parent_app_key;
+            }
+        }
         $msg = $this->getAddFeeContent($detail, $template);
         $push_array = array(
-            'title' => 'Fees Notification',
+            'title' => ($subject != '') ? $subject : 'Fees Notification',
             'body' => $msg
         );
-        if ($detail->parent_app_key != "") {
-            $this->_CI->pushnotification->send($detail->parent_app_key, $push_array, "mail_sms");
-        }
+        return $this->sendModulePushTargets(array(
+            'parent_app_key' => isset($detail->parent_app_key) ? $detail->parent_app_key : '',
+            'app_key' => isset($detail->app_key) ? $detail->app_key : '',
+        ), $push_array, 'Fee submission push notification summary');
     }
 
     public function sentHomeworkStudentSMS($detail, $template) {

@@ -9,6 +9,7 @@ class Stuattendence extends Admin_Controller {
         parent::__construct();
 
         $this->config->load("mailsms");
+        $this->load->library('mailsmsconf');
         $this->config_attendance = $this->config->item('attendence');
         $this->load->model("classteacher_model");
         $this->load->model("whatsappcampaign_model");
@@ -94,6 +95,8 @@ class Stuattendence extends Admin_Controller {
                 foreach ($session_ary as $key => $value) {
                     $checkForUpdate = $this->input->post('attendendence_id' . $value);
                     if ($checkForUpdate != 0) {
+                        $previous_attendance = $this->stuattendence_model->get($checkForUpdate);
+                        $previous_attendance_type_id = isset($previous_attendance['attendence_type_id']) ? (int) $previous_attendance['attendence_type_id'] : 0;
                         if (isset($holiday)) {
                             $arr = array(
                                 'id' => $checkForUpdate,
@@ -113,7 +116,8 @@ class Stuattendence extends Admin_Controller {
                         }
                         $insert_id = $this->stuattendence_model->add($arr);
                         if (!isset($holiday)
-                            && in_array((int) $arr['attendence_type_id'], $absent_type_ids, true)) {
+                            && in_array((int) $arr['attendence_type_id'], $absent_type_ids, true)
+                            && !in_array($previous_attendance_type_id, $absent_type_ids, true)) {
                             $absent_student_list[] = $value;
                         }
                     } else {
@@ -143,6 +147,7 @@ class Stuattendence extends Admin_Controller {
                 }
                 if (!empty($absent_student_list)) {
                     $absent_student_list = array_values(array_unique($absent_student_list));
+                    $this->mailsmsconf->mailsms('absent_attendence', $absent_student_list, $date);
                     $admin_session = $this->session->userdata('admin');
                     $created_by = isset($admin_session['id']) ? (int) $admin_session['id'] : 0;
                     $whatsapp_campaign_id = $this->whatsappcampaign_model->createAbsenceAlertCampaignForStudentSessions($class, $section, $attendance_date, $absent_student_list, $created_by);
