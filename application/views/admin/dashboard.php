@@ -693,19 +693,24 @@
 
             </div>
 
-            <?php $currency_symbol = $this->customlib->getSchoolCurrencyFormat(); ?>
+            <?php
+            $currency_symbol = $this->customlib->getSchoolCurrencyFormat();
+            $format_dashboard_amount = static function ($amount, $decimals = 2) {
+                return number_format((float) $amount, $decimals, '.', ',');
+            };
+            ?>
             <div class="col-md-12">
 
                 <div class="row">
 
                     <?php if ($this->rbac->hasPrivilege('Monthly fees_collection_widget', 'can_view')) { ?>
-                        <!-- Total Receiveable Fee Box -->
+                        <!-- Total Receivable Fee Box -->
                         <div class="col col-lg col-md-4 col-sm-6 col-xs-12 dashboard-metric">
                             <div class="small-box bg-blue">
                                 <div class="inner">
-                                    <h3><?php echo $currency_symbol . number_format(isset($total_receivable_fee) ? $total_receivable_fee : 0, 2); ?></h3>
+                                    <h3><?php echo $currency_symbol . $format_dashboard_amount(isset($total_receivable_fee) ? $total_receivable_fee : 0); ?></h3>
 
-                                    <p>Total Receiveable Fee</p>
+                                    <p>Total Receivable Fee</p>
                                 </div>
                                 <div class="icon">
                                     <i class="fa fa-money"></i>
@@ -718,7 +723,7 @@
                         <div class="col col-lg col-md-4 col-sm-6 col-xs-12 dashboard-metric">
                             <div class="small-box bg-aqua">
                                 <div class="inner">
-                                    <h3><?php echo $currency_symbol . $month_collection; ?></h3>
+                                    <h3><?php echo $currency_symbol . $format_dashboard_amount($month_collection); ?></h3>
 
                                     <p><?php echo $this->lang->line('monthly_fees_collection'); ?></p>
                                 </div>
@@ -736,7 +741,7 @@
                                     <?php
                                     $remaining_balance = isset($total_remaining_balance) ? floatval($total_remaining_balance) : 0;
                                     ?>
-                                    <h3><?php echo $currency_symbol . number_format($remaining_balance, 2); ?></h3>
+                                    <h3><?php echo $currency_symbol . $format_dashboard_amount($remaining_balance); ?></h3>
 
                                     <p>Total Remaining Balance</p>
                                 </div>
@@ -752,7 +757,7 @@
                         <div class="col col-lg col-md-4 col-sm-6 col-xs-12 dashboard-metric">
                             <div class="small-box bg-green">
                                 <div class="inner">
-                                    <h3><?php echo $currency_symbol . $month_expense; ?></h3>
+                                    <h3><?php echo $currency_symbol . $format_dashboard_amount($month_expense); ?></h3>
 
                                     <p><?php echo $this->lang->line('monthly_expenses'); ?></p>
                                 </div>
@@ -768,7 +773,7 @@
                         <div class="col col-lg col-md-4 col-sm-6 col-xs-12 dashboard-metric">
                             <div class="small-box bg-teal">
                                 <div class="inner">
-                                    <h3><?php echo $currency_symbol . $month_income; ?></h3>
+                                    <h3><?php echo $currency_symbol . $format_dashboard_amount($month_income); ?></h3>
 
                                     <p><?php echo 'Monthly Income'; ?></p>
                                 </div>
@@ -785,7 +790,7 @@
                         <div class="col col-lg col-md-4 col-sm-6 col-xs-12 dashboard-metric">
                             <div class="small-box bg-yellow">
                                 <div class="inner">
-                                    <h3><?php echo $total_students; ?></h3>
+                                    <h3><?php echo number_format((int) $total_students, 0, '.', ','); ?></h3>
 
                                     <p><?php echo $this->lang->line('student'); ?>(s)</p>
                                 </div>
@@ -802,7 +807,7 @@
                         <div class="col col-lg col-md-4 col-sm-6 col-xs-12 dashboard-metric">
                             <div class="small-box bg-red">
                                 <div class="inner">
-                                    <h3><?php echo isset($pending_annual_charges['total_amount']) ? $currency_symbol . number_format($pending_annual_charges['total_amount'], 0) : $currency_symbol . '0'; ?></h3>
+                                    <h3><?php echo isset($pending_annual_charges['total_amount']) ? $currency_symbol . $format_dashboard_amount($pending_annual_charges['total_amount']) : $currency_symbol . '0.00'; ?></h3>
 
                                     <p>Pending Annual Charges</p>
                                 </div>
@@ -824,7 +829,7 @@
                                 <!-- small box -->
                                 <div class="small-box bg-red">
                                     <div class="inner">
-                                        <h3><?php echo $value; ?></h3>
+                                        <h3><?php echo number_format((int) $value, 0, '.', ','); ?></h3>
                                         <p><?php echo $key; ?>(s)</p>
                                     </div>
                                     <div class="icon">

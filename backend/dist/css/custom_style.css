@@ -29,3 +29,7 @@
 .main-header .logo .logo-mini img {
     max-height: 30px;
 }
+
+.main-header.affix-top {
+    background: #fff !important;
+}

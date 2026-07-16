@@ -332,6 +332,10 @@
                 );
             }
 
+            $fee_calculation = $this->calculateCompleteFeeBalance($start_date, $end_date);
+            $data['total_receivable_fee'] = isset($fee_calculation['total_receivable_fee']) ? (float) $fee_calculation['total_receivable_fee'] : 0;
+            $data['total_remaining_balance'] = max(0, $data['total_receivable_fee'] - (float) $month_collection);
+
             if ($data['sch_setting']->attendence_type == 0) {
                 $data['std_graphclass'] = "col-lg-3 col-md-6 col-sm-6";
             } else {
@@ -360,9 +364,10 @@
                 $data = array_merge($cached_dashboard, $data);
                 $start_date = date('Y-m-01');
                 $end_date   = date('Y-m-t');
+                $data['month_collection'] = $this->getMonthlyCollectionAmount($start_date, date('Y-m-d'));
                 $fee_calculation = $this->calculateCompleteFeeBalance($start_date, $end_date);
                 $data['total_receivable_fee'] = isset($fee_calculation['total_receivable_fee']) ? (float) $fee_calculation['total_receivable_fee'] : 0;
-                $data['total_remaining_balance'] = isset($fee_calculation['total_remaining_balance']) ? (float) $fee_calculation['total_remaining_balance'] : 0;
+                $data['total_remaining_balance'] = max(0, $data['total_receivable_fee'] - (float) $data['month_collection']);
                 $this->load->view('layout/header', $data);
                 $this->load->view('admin/dashboard', $data);
                 $this->load->view('layout/footer', $data);
@@ -566,7 +571,7 @@
 
             $fee_calculation = $this->calculateCompleteFeeBalance($start_date, $end_date);
             $data['total_receivable_fee'] = isset($fee_calculation['total_receivable_fee']) ? (float) $fee_calculation['total_receivable_fee'] : 0;
-            $data['total_remaining_balance'] = isset($fee_calculation['total_remaining_balance']) ? (float) $fee_calculation['total_remaining_balance'] : 0;
+            $data['total_remaining_balance'] = max(0, $data['total_receivable_fee'] - (float) $month_collection);
 
             $total_enquiry = $enquiry['total'];
 
@@ -1607,7 +1612,7 @@
             try {
                 $session_array = $this->session->userdata('session_array');
                 $active_session_id = (!empty($session_array) && isset($session_array['session_id'])) ? $session_array['session_id'] : $this->setting_model->getCurrentSession();
-                $cache_key = 'dashboard_fee_balance_report_v2_' . (int) $active_session_id . '_' . $start_date . '_' . $end_date;
+                $cache_key = 'dashboard_fee_balance_report_v4_' . (int) $active_session_id . '_' . $start_date . '_' . $end_date;
                 $cached = $this->getCachedDashboardPayload($cache_key);
                 if (is_array($cached) && isset($cached['total_receivable_fee'])) {
                     return $cached;
@@ -1660,6 +1665,10 @@
                     $current_section_date = $year . '-' . str_pad($startMonth, 2, '0', STR_PAD_LEFT) . '-01';
                     $current_section1 = date('Y-m-01', strtotime($current_section_date));
                 }
+
+                $section_start_ts = strtotime($current_section1);
+                $period_start_ts = strtotime($start_date);
+                $period_end_ts = strtotime($end_date);
                 
                 
                 // Get active student session IDs only (memory-optimized)
@@ -1713,15 +1722,25 @@
 
                                     if (is_object($amount_detail)) {
                                         foreach ($amount_detail as $amount_detail_key => $amount_detail_value) {
-                                            if ($amount_detail_value->date >= $start_date && $amount_detail_value->date <= $end_date) {
-                                                $deposit += $amount_detail_value->amount;
-                                                $fine += $amount_detail_value->amount_fine;
-                                                $discount += $amount_detail_value->amount_discount;
+                                            $detail_date_value = $this->extractAmountDetailDateValue($amount_detail_value);
+                                            $detail_date_ts = $this->parseDateToDayTimestamp($detail_date_value, $section_start_ts, $period_end_ts);
+                                            if ($detail_date_ts === null) {
+                                                continue;
                                             }
 
-                                            if ($amount_detail_value->date >= $current_section1 && $amount_detail_value->date < $start_date) {
-                                                $previous_deposit += $amount_detail_value->amount;
-                                                $previous_discount += $amount_detail_value->amount_discount;
+                                            $detail_amount = isset($amount_detail_value->amount) ? (float) $amount_detail_value->amount : 0;
+                                            $detail_fine = isset($amount_detail_value->amount_fine) ? (float) $amount_detail_value->amount_fine : 0;
+                                            $detail_discount = isset($amount_detail_value->amount_discount) ? (float) $amount_detail_value->amount_discount : 0;
+
+                                            if ($detail_date_ts >= $period_start_ts && $detail_date_ts <= $period_end_ts) {
+                                                $deposit += $detail_amount;
+                                                $fine += $detail_fine;
+                                                $discount += $detail_discount;
+                                            }
+
+                                            if ($detail_date_ts >= $section_start_ts && $detail_date_ts < $period_start_ts) {
+                                                $previous_deposit += $detail_amount;
+                                                $previous_discount += $detail_discount;
                                             }
                                         }
                                     }
@@ -1729,10 +1748,8 @@
                             }
                         }
 
-                        $arrears = ($previous + $previous_monthfee) - ($previous_deposit + $previous_discount);
-                        $total = $monthfee + $arrears + $fine;
-                        $balance = $total - ($deposit + $discount);
-
+                        $previous_fees = $previous + $previous_monthfee;
+                        $arrears = $previous_fees - ($previous_deposit + $previous_discount);
                         $grand_total_current += $monthfee;
                         $grand_total_arrears += $arrears;
                         $grand_total_fine += $fine;
@@ -1742,7 +1759,7 @@
                 }
 
                 $total_receivable_fee = $grand_total_current + $grand_total_arrears + $grand_total_fine;
-                $total_remaining_balance = $total_receivable_fee - ($grand_total_received + $grand_total_discount);
+                $total_remaining_balance = max(0, $total_receivable_fee - ($grand_total_received + $grand_total_discount));
                 
                 $result = array(
                     'total_receivable_fee' => $total_receivable_fee,
