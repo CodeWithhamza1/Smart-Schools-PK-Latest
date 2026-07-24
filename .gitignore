@@ -1,0 +1,17 @@
+.agents
+.codex
+.claude
+
+# VS Code settings in any directory.
+.vscode/
+
+# Dot-prefixed files and folders, except this ignore file.
+.[!.]*
+!.gitignore
+
+# ZIP archives in any directory.
+*.zip
+!whatsapp-chrome-extension.zip
+
+# Local/reference-only Charts of Accounts module source.
+charts_of_accounts_module_source/

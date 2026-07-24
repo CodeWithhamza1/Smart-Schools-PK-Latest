@@ -359,6 +359,16 @@ if (!is_subAttendence()) {
 
                                 <li class="<?php echo set_Submenu('Attendance/approve_leave'); ?>"><a href="<?php echo base_url(); ?>admin/approve_leave"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('approve') . " " . $this->lang->line('leave'); ?></a></li>
                             <?php }?>
+                            <?php if ($this->rbac->hasPrivilege('student_attendance', 'can_view')): ?>
+                                <li class="<?php echo set_Submenu('attendance/index'); ?>"><a href="<?php echo base_url(); ?>admin/attendance"><i class="fa fa-angle-double-right"></i> ZKTeco Attendance</a></li>
+                                <li class="<?php echo set_Submenu('attendance/view_logs'); ?>"><a href="<?php echo base_url(); ?>admin/attendance/view_logs"><i class="fa fa-angle-double-right"></i> Attendance Logs</a></li>
+                                <li class="<?php echo set_Submenu('attendance/report'); ?>"><a href="<?php echo base_url(); ?>admin/attendance/report"><i class="fa fa-angle-double-right"></i> Staff Attendance Report</a></li>
+                                <li class="<?php echo set_Submenu('attendance/student_report'); ?>"><a href="<?php echo base_url(); ?>admin/attendance/student_report"><i class="fa fa-angle-double-right"></i> Student Attendance Report</a></li>
+                            <?php endif; ?>
+                            <?php if ($this->rbac->hasPrivilege('student_attendance', 'can_edit')): ?>
+                                <li class="<?php echo set_Submenu('attendance/manage_mappings'); ?>"><a href="<?php echo base_url(); ?>admin/attendance/manage_mappings"><i class="fa fa-angle-double-right"></i> Attendance Mappings</a></li>
+                                <li class="<?php echo set_Submenu('attendance/manage_devices'); ?>"><a href="<?php echo base_url(); ?>admin/attendance/manage_devices"><i class="fa fa-angle-double-right"></i> Manage Devices</a></li>
+                            <?php endif; ?>
                         </ul>
                     </li>
                     <?php

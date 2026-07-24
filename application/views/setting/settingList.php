@@ -37,11 +37,11 @@
                         <?php
                         if ($result->admin_logo == "") {
                             ?>
-                            <img src="<?php echo base_url() ?>uploads/school_content/admin_logo/images.png" class="img-thumbnail " alt="Cinque Terre" width="204" height="60">
+                            <img src="<?php echo base_url() ?>uploads/school_content/admin_logo/images.png?v=<?php echo (int) @filemtime(FCPATH . 'uploads/school_content/admin_logo/images.png'); ?>" class="img-thumbnail " alt="Cinque Terre" width="204" height="60">
                             <?php
                         } else {
                             ?>
-                            <img src="<?php echo base_url() ?>uploads/school_content/admin_logo/<?php echo $result->admin_logo; ?>" class="img-thumbnail" alt="" width="204" height="60">
+                            <img src="<?php echo base_url() ?>uploads/school_content/admin_logo/<?php echo rawurlencode($result->admin_logo); ?>?v=<?php echo (int) @filemtime(FCPATH . 'uploads/school_content/admin_logo/' . basename($result->admin_logo)); ?>" class="img-thumbnail" alt="" width="204" height="60">
                             <?php
                         }
                         ?>
@@ -55,11 +55,11 @@
                         <?php
                         if ($result->admin_small_logo == "") {
                             ?>
-                            <img src="<?php echo base_url() ?>uploads/school_content/logo/images.png" class="img-thumbnail" alt="Cinque Terre" width="" height="">
+                            <img src="<?php echo base_url() ?>uploads/school_content/admin_small_logo/images.png?v=<?php echo (int) @filemtime(FCPATH . 'uploads/school_content/admin_small_logo/images.png'); ?>" class="img-thumbnail" alt="Cinque Terre" width="100" height="100">
                             <?php
                         } else {
                             ?>
-                            <img src="<?php echo base_url() ?>uploads/school_content/admin_small_logo/<?php echo $result->admin_small_logo; ?>" class="" alt="Cinque Terre" width="" height="">
+                            <img src="<?php echo base_url() ?>uploads/school_content/admin_small_logo/<?php echo rawurlencode($result->admin_small_logo); ?>?v=<?php echo (int) @filemtime(FCPATH . 'uploads/school_content/admin_small_logo/' . basename($result->admin_small_logo)); ?>" class="" alt="Cinque Terre" width="100" height="100" style="object-fit: contain;">
                             <?php
                         }
                         ?>
@@ -74,11 +74,11 @@
                         <?php
                         if ($result->app_logo == "") {
                             ?>
-                            <img src="<?php echo base_url() ?>uploads/school_content/logo/images.png" class="img-thumbnail img-responsive " alt="" width="" height="">
+                            <img src="<?php echo base_url() ?>uploads/school_content/logo/app_logo/images.png?v=<?php echo (int) @filemtime(FCPATH . 'uploads/school_content/logo/app_logo/images.png'); ?>" class="img-thumbnail img-responsive " alt="" width="100" height="100">
                             <?php
                         } else {
                             ?>
-                            <img src="<?php echo base_url() ?>uploads/school_content/logo/app_logo/<?php echo $result->app_logo; ?>" class="img-responsive" alt="" width="" height="">
+                            <img src="<?php echo base_url() ?>uploads/school_content/logo/app_logo/<?php echo rawurlencode($result->app_logo); ?>?v=<?php echo (int) @filemtime(FCPATH . 'uploads/school_content/logo/app_logo/' . basename($result->app_logo)); ?>" class="img-responsive" alt="" width="100" height="100" style="object-fit: contain;">
                             <?php
                         }
                         ?>
@@ -709,7 +709,7 @@
                                         <div class="form-group row">
                                             <label class="col-sm-2"> <?php echo $this->lang->line('mobile_app_api_url') ?></label>
                                             <div class="col-sm-10">
-                                                <input type="text" name="mobile_api_url" id="mobile_api_url" class="form-control" value="<?php echo $result->mobile_api_url; ?>">
+                                                <input type="text" name="mobile_api_url" id="mobile_api_url" class="form-control" placeholder="https://{baseurl}/api" value="<?php echo htmlspecialchars(!empty($result->mobile_api_url) ? $result->mobile_api_url : 'https://{baseurl}/api', ENT_QUOTES, 'UTF-8'); ?>">
                                                 <span class="text-danger"><?php echo form_error('mobile_api_url'); ?></span>
                                             </div>
                                         </div>

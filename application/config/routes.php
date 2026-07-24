@@ -15,6 +15,12 @@ $route['404_override'] = 'welcome/show_404';
 $route['translate_uri_dashes'] = FALSE;
 $route['cron/(:any)'] = 'cron/index/$1';
 
+// ZKTeco attendance module routes.
+$route['api/attendance/health'] = 'api_attendance/health';
+$route['api/attendance/sync'] = 'api_attendance/sync';
+$route['api/attendance/reconcile'] = 'api_attendance/reconcile';
+$route['admin/attendance/student_report'] = 'admin/attendance/student_report';
+
 //======= front url rewriting==========
 $route['page/(:any)'] = 'welcome/page/$1';
 $route['read/(:any)'] = 'welcome/read/$1';

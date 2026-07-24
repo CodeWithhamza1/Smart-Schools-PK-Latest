@@ -55,6 +55,19 @@ class Schsettings extends Admin_Controller
         }
     }
 
+    private function persistLogoSetting($data, $newFilePath)
+    {
+        if ($this->setting_model->add($data) !== false) {
+            return true;
+        }
+
+        if (is_file($newFilePath)) {
+            @unlink($newFilePath);
+        }
+
+        return false;
+    }
+
     private function sanitize_post_text($key, $default = '')
     {
         $value = $this->input->post($key, true);
@@ -146,7 +159,11 @@ class Schsettings extends Admin_Controller
             }
             $img_name    = $upload['file_name'];
             $data_record = array('id' => $id, 'image' => $img_name);
-            $this->setting_model->add($data_record);
+            if (!$this->persistLogoSetting($data_record, rtrim($target_dir, '/\\') . DIRECTORY_SEPARATOR . $img_name)) {
+                $array = array('success' => false, 'error' => array('file' => $this->lang->line('something_went_wrong')));
+                echo json_encode($array);
+                return;
+            }
             $this->removeReplacedLogo($target_dir, $old_file, $img_name);
             $array = array('success' => true, 'error' => '', 'message' => $this->lang->line('success_message'));
             echo json_encode($array);
@@ -177,7 +194,11 @@ class Schsettings extends Admin_Controller
             }
             $img_name    = $upload['file_name'];
             $data_record = array('id' => $id, 'admin_small_logo' => $img_name);
-            $this->setting_model->add($data_record);
+            if (!$this->persistLogoSetting($data_record, rtrim($target_dir, '/\\') . DIRECTORY_SEPARATOR . $img_name)) {
+                $array = array('success' => false, 'error' => array('file' => $this->lang->line('something_went_wrong')));
+                echo json_encode($array);
+                return;
+            }
             $this->removeReplacedLogo($target_dir, $old_file, $img_name);
             $array = array('success' => true, 'error' => '', 'message' => $this->lang->line('success_message'));
             echo json_encode($array);
@@ -208,7 +229,11 @@ class Schsettings extends Admin_Controller
             }
             $img_name    = $upload['file_name'];
             $data_record = array('id' => $id, 'admin_logo' => $img_name);
-            $this->setting_model->add($data_record);
+            if (!$this->persistLogoSetting($data_record, rtrim($target_dir, '/\\') . DIRECTORY_SEPARATOR . $img_name)) {
+                $array = array('success' => false, 'error' => array('file' => $this->lang->line('something_went_wrong')));
+                echo json_encode($array);
+                return;
+            }
             $this->removeReplacedLogo($target_dir, $old_file, $img_name);
             $array = array('success' => true, 'error' => '', 'message' => $this->lang->line('success_message'));
             echo json_encode($array);
@@ -239,7 +264,11 @@ class Schsettings extends Admin_Controller
                 $img_name = $upload['file_name'];
             }
             $data_record = array('id' => $id, 'image' => $img_name);
-            $this->setting_model->add($data_record);
+            if (!$this->persistLogoSetting($data_record, rtrim($target_dir, '/\\') . DIRECTORY_SEPARATOR . $img_name)) {
+                $this->session->set_flashdata('msg', '<div class="alert alert-danger alert-left">' . $this->lang->line('something_went_wrong') . '</div>');
+                redirect('schsettings/index');
+                return;
+            }
             $this->removeReplacedLogo($target_dir, $old_file, $img_name);
             $this->session->set_flashdata('msg', '<div class="alert alert-left">' . $this->lang->line('update_message') . '</div>');
             redirect('schsettings/index');
@@ -533,7 +562,11 @@ class Schsettings extends Admin_Controller
 
             $data_record = array('id' => $id, 'app_logo' => $img_name);
 
-            $this->setting_model->add($data_record);
+            if (!$this->persistLogoSetting($data_record, rtrim($target_dir, '/\\') . DIRECTORY_SEPARATOR . $img_name)) {
+                $array = array('success' => false, 'error' => array('file' => $this->lang->line('something_went_wrong')));
+                echo json_encode($array);
+                return;
+            }
             $this->removeReplacedLogo($target_dir, $old_file, $img_name);
             $array = array('success' => true, 'error' => '', 'message' => 'Record Updated Successfully');
             echo json_encode($array);
