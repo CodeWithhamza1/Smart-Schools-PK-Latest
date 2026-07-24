@@ -257,21 +257,10 @@ class Mailsmsconf {
 
                 foreach ($student_list as $student_key => $student_value) {
 
-                    if ($student_value['app_key'] != "") {
+                    if ($student_value['app_key'] != "" || $student_value['parent_app_key'] != "") {
                         $student_notification_list[] = array(
                             'app_key' => $student_value['app_key'],
-                            'class' => $student_value['class'],
-                            'section' => $student_value['section'],
-                            'homework_date' => $homework_date,
-                            'submit_date' => $submit_date,
-                            'subject' => $subject,
-                            'admission_no' => $student_value['admission_no'],
-                            'student_name' => $this->CI->customlib->getFullName($student_value['firstname'],$student_value['middlename'],$student_value['lastname'],$this->sch_setting->middlename,$this->sch_setting->lastname),
-                        );
-                    }
-                    if ($student_value['parent_app_key'] != "") {
-                        $student_notification_list[] = array(
-                            'app_key' => $student_value['parent_app_key'],
+                            'parent_app_key' => $student_value['parent_app_key'],
                             'class' => $student_value['class'],
                             'section' => $student_value['section'],
                             'homework_date' => $homework_date,

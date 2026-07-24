@@ -35,6 +35,20 @@ class Smsgateway {
         );
     }
 
+    private function getSkippedPushSummaryDetail($label) {
+        return array(
+            'label' => $label,
+            'token_prefix' => '',
+            'success' => false,
+            'driver' => 'http_v1',
+            'http_code' => 0,
+            'error' => 'empty_token',
+            'fcm_error_code' => null,
+            'invalid_token_cleared_rows' => 0,
+            'message' => 'FCM token is empty',
+        );
+    }
+
     private function sendModulePushTargets($targets, $push_array, $summary_label) {
         $this->_CI->load->library('pushnotification');
         $summary = array('requested' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0, 'details' => array());
@@ -43,6 +57,7 @@ class Smsgateway {
             $token = trim((string) $token);
             if ($token === '') {
                 $summary['skipped']++;
+                $summary['details'][] = $this->getSkippedPushSummaryDetail($label);
                 continue;
             }
 
@@ -605,16 +620,25 @@ class Smsgateway {
                 'title' => ($subject != '') ? $subject : 'Homework',
                 'body' => $msg
             );
-            $token = isset($student_value['app_key']) ? trim((string) $student_value['app_key']) : '';
-            if ($token === '') {
-                $summary['skipped']++;
-                continue;
+            $targets = array(
+                'homework_' . $student_key . '_parent_app_key' => isset($student_value['parent_app_key']) ? $student_value['parent_app_key'] : '',
+                'homework_' . $student_key . '_app_key' => isset($student_value['app_key']) ? $student_value['app_key'] : '',
+            );
+
+            foreach ($targets as $label => $token) {
+                $token = trim((string) $token);
+                if ($token === '') {
+                    $summary['skipped']++;
+                    $summary['details'][] = $this->getSkippedPushSummaryDetail($label);
+                    continue;
+                }
+
+                $report = $this->_CI->pushnotification->sendWithReport($token, $push_array, 'mail_sms');
+                $success = !empty($report['success']);
+                $summary['requested']++;
+                $summary[$success ? 'sent' : 'failed']++;
+                $summary['details'][] = $this->getPushSummaryDetail($label, $token, $success, $report);
             }
-            $report = $this->_CI->pushnotification->sendWithReport($token, $push_array, 'mail_sms');
-            $success = !empty($report['success']);
-            $summary['requested']++;
-            $summary[$success ? 'sent' : 'failed']++;
-            $summary['details'][] = $this->getPushSummaryDetail('homework_' . $student_key, $token, $success, $report);
         }
         log_message('info', 'Homework push notification summary: ' . json_encode($summary));
         return $summary;

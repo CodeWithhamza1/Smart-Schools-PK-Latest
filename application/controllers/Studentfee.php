@@ -44,6 +44,25 @@ class Studentfee extends Admin_Controller
             ->row();
     }
 
+    private function sendFeeSubmissionNotification($student_session_id, $fee_groups_feetype_id, $invoice, $contact_no = '', $email = '', $fallback_parent_app_key = '')
+    {
+        $mailsms_array = $this->feegrouptype_model->getFeeGroupByID($fee_groups_feetype_id);
+        if (empty($mailsms_array)) {
+            log_message('error', 'Fee submission push notification skipped: fee_groups_feetype_id not found: ' . $fee_groups_feetype_id);
+            return;
+        }
+
+        $push_keys = $this->getStudentPushKeysBySession($student_session_id);
+        $mailsms_array->invoice = is_string($invoice) ? $invoice : json_encode($invoice);
+        $mailsms_array->contact_no = $contact_no;
+        $mailsms_array->email = $email;
+        $mailsms_array->student_session_id = $student_session_id;
+        $mailsms_array->app_key = !empty($push_keys) ? $push_keys->app_key : '';
+        $mailsms_array->parent_app_key = !empty($push_keys) ? $push_keys->parent_app_key : $fallback_parent_app_key;
+
+        $this->mailsmsconf->mailsms('fee_submission', $mailsms_array);
+    }
+
 
 
     public function index()
@@ -1423,8 +1442,6 @@ class Studentfee extends Admin_Controller
                 // Fail gracefully, but always echo JSON at the end
             }
 
-            $mailsms_array      = $this->feegrouptype_model->getFeeGroupByID($this->input->post('fee_groups_feetype_id'));
-
             $print_record       = array();
 
             if ($action == "print") {
@@ -1446,20 +1463,14 @@ class Studentfee extends Admin_Controller
                 $print_record           = $this->load->view('print/printFeesByName', $data, true);
             }
 
-            $mailsms_array->invoice        = $inserted_id;
-
-            $mailsms_array->contact_no     = $send_to;
-
-            $mailsms_array->email          = $email;
-
-            $push_keys = $this->getStudentPushKeysBySession($student_session_id);
-            $mailsms_array->student_session_id = $student_session_id;
-            $mailsms_array->app_key = !empty($push_keys) ? $push_keys->app_key : '';
-            $mailsms_array->parent_app_key = !empty($push_keys) ? $push_keys->parent_app_key : $parent_app_key;
-
-
-
-            $this->mailsmsconf->mailsms('fee_submission', $mailsms_array);
+            $this->sendFeeSubmissionNotification(
+                $student_session_id,
+                $this->input->post('fee_groups_feetype_id'),
+                $inserted_id,
+                $send_to,
+                $email,
+                $parent_app_key
+            );
 
 
 
@@ -2019,20 +2030,16 @@ class Studentfee extends Admin_Controller
 
             foreach ($total_row as $total_row_key => $total_row_value) {
 
-                $mailsms_array                 = $this->feegrouptype_model->getFeeGroupByID($this->input->post('fee_groups_feetype_id_' . $total_row_value));
-
-                $mailsms_array->invoice        = json_encode($fees_record[$total_row_key]);
-
-                $mailsms_array->contact_no     = $send_to;
-
-                $mailsms_array->email          = $email;
-
-                $push_keys = $this->getStudentPushKeysBySession($student_session_id);
-                $mailsms_array->student_session_id = $student_session_id;
-                $mailsms_array->app_key = !empty($push_keys) ? $push_keys->app_key : '';
-                $mailsms_array->parent_app_key = !empty($push_keys) ? $push_keys->parent_app_key : $parent_app_key;
-
-                $this->mailsmsconf->mailsms('fee_submission', $mailsms_array);
+                if (isset($fees_record[$total_row_key])) {
+                    $this->sendFeeSubmissionNotification(
+                        $student_session_id,
+                        $this->input->post('fee_groups_feetype_id_' . $total_row_value),
+                        $fees_record[$total_row_key],
+                        $send_to,
+                        $email,
+                        $parent_app_key
+                    );
+                }
             }
 
             $array = array('status' => 1, 'error' => '');
@@ -2156,9 +2163,19 @@ class Studentfee extends Admin_Controller
 
             $invoice_amount = $deposit_amount;
 
-            $sender_details = array('student_session_id' => $student_session_id, 'admission_no' => $admission_no, 'std_name' => $std_name, 'invoice_amount' => $invoice_amount, 'contact_no' => $send_to, 'email' => $email, 'notification_to' => array('parent_app_key' => $student_detail->parent_app_key));
-
-            $this->mailsmsconf->mailsms_grup('fee_submission', $sender_details);
+            $fees_record = json_decode($inserted_id);
+            foreach ($total_row as $total_row_key => $total_row_value) {
+                if (isset($fees_record[$total_row_key])) {
+                    $this->sendFeeSubmissionNotification(
+                        $student_session_id,
+                        $this->input->post('fee_groups_feetype_id_' . $total_row_value),
+                        $fees_record[$total_row_key],
+                        $send_to,
+                        $email,
+                        $student_detail->parent_app_key
+                    );
+                }
+            }
 
             echo json_encode($array);
 
@@ -2669,9 +2686,19 @@ class Studentfee extends Admin_Controller
 
             $invoice_amount = $deposit_amount;
 
-            $sender_details = array('student_session_id' => $student_session_id, 'admission_no' => $admission_no, 'std_name' => $std_name, 'invoice_amount' => $invoice_amount, 'contact_no' => $send_to, 'email' => $email, 'notification_to' => array('parent_app_key' => $student_detail->parent_app_key));
-
-            $this->mailsmsconf->mailsms_grup('fee_submission', $sender_details);
+            $fees_record = json_decode($inserted_id);
+            foreach ($total_row as $total_row_key => $total_row_value) {
+                if (isset($fees_record[$total_row_key])) {
+                    $this->sendFeeSubmissionNotification(
+                        $student_session_id,
+                        $this->input->post('fee_groups_feetype_id_' . $total_row_value),
+                        $fees_record[$total_row_key],
+                        $send_to,
+                        $email,
+                        $student_detail->parent_app_key
+                    );
+                }
+            }
 
             $this->printFeesByGroupArray1($total_row, $student_session_id);
         }
@@ -2782,26 +2809,22 @@ class Studentfee extends Admin_Controller
 
 
         $inserted_id = $this->studentfeemaster_model->fee_deposit_collections_old($collected_array);
-
-
-
-        /*$student_detail = $this->studentfeemaster_model->getStudentDetailByStudentSession($student_fees_master_id);
-
-            $send_to = $student_detail->guardian_phone;
-
-            $student_session_id = $student_detail->student_session_id;
-
-            $email = $student_detail->guardian_email;
-
-            $std_name = $student_detail->firstname." ".$student_detail->lastname;
-
-            $admission_no = $student_detail->admission_no;
-
-            $invoice_amount=$deposit_amount;
-
-            $sender_details = array('student_session_id' => $student_session_id,'admission_no' => $admission_no,'std_name' => $std_name,'invoice_amount' => $invoice_amount, 'contact_no' => $send_to, 'email' => $email,'notification_to'=>array('parent_app_key'=>$student_detail->parent_app_key));
-
-            $this->mailsmsconf->mailsms_grup('fee_submission', $sender_details);*/
+        $student_detail = $this->studentfeemaster_model->getStudentDetailByStudentSession($student_fees_master_id);
+        $fees_record = json_decode($inserted_id);
+        if (!empty($student_detail) && !empty($fees_record)) {
+            foreach ($total_row as $total_row_key => $total_row_value) {
+                if (isset($fees_record[$total_row_key])) {
+                    $this->sendFeeSubmissionNotification(
+                        $student_detail->student_session_id,
+                        $this->input->post('fee_groups_feetype_id_' . $total_row_value),
+                        $fees_record[$total_row_key],
+                        $student_detail->guardian_phone,
+                        $student_detail->guardian_email,
+                        $student_detail->parent_app_key
+                    );
+                }
+            }
+        }
 
         $array       = array('status' => 1, 'error' => '');
 
