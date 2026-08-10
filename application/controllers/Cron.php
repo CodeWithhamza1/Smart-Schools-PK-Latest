@@ -163,6 +163,13 @@ class Cron extends CI_Controller
         }
     }
 
+    public function ai_widget_cleanup($key = '')
+    {
+        if ($key == '' || $this->cron_key != $key) { echo "Invalid Key or Direct access is not allowed"; return; }
+        $this->load->model('ai_widget_model');
+        echo 'Deleted expired AI widget sessions: ' . (int) $this->ai_widget_model->delete_expired();
+    }
+
     public function whatsappcampaign($key = "")
     {
         if ($key != "") {

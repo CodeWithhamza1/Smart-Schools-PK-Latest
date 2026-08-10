@@ -15,3 +15,4 @@
 
 # Local/reference-only Charts of Accounts module source.
 charts_of_accounts_module_source/
+application/config/groq.php

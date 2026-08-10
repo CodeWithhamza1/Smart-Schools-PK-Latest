@@ -1461,6 +1461,27 @@
 
 </div>
 
+<?php
+$ai_admin = $this->session->userdata('admin');
+$ai_roles = (isset($ai_admin['roles']) && is_array($ai_admin['roles'])) ? array_keys($ai_admin['roles']) : array(isset($ai_admin['role']) ? $ai_admin['role'] : '');
+$ai_allowed = false;
+foreach ($ai_roles as $ai_role) {
+    $ai_role = strtolower(trim((string) $ai_role));
+    if (in_array($ai_role, array('admin', 'super admin', 'superadmin'), true)) { $ai_allowed = true; break; }
+}
+// Keep the dashboard available if the optional AI widget files have not yet been uploaded.
+$ai_widget_view = APPPATH . 'views/partials/ai_widget.php';
+$ai_widget_exists = is_file($ai_widget_view);
+$ai_widget_debug = isset($_GET['ai_widget_debug']) && (string) $_GET['ai_widget_debug'] === '1';
+$ai_widget_debug_roles = implode(', ', array_map('strval', $ai_roles));
+if ($ai_widget_debug) {
+    log_message('error', 'AI widget debug: allowed=' . ($ai_allowed ? 'yes' : 'no') . '; file_exists=' . ($ai_widget_exists ? 'yes' : 'no') . '; roles=' . $ai_widget_debug_roles . '; path=' . $ai_widget_view);
+    echo '<div style="position:fixed;right:20px;bottom:20px;z-index:100000;max-width:440px;padding:14px 16px;background:#fff8e1;border:2px solid #d99b00;border-radius:8px;color:#5d4300;font:13px/1.5 Arial,sans-serif;box-shadow:0 4px 18px rgba(0,0,0,.2)">';
+    echo '<strong>AI widget debug</strong><br>Allowed role: ' . ($ai_allowed ? 'yes' : 'no') . '<br>Partial exists: ' . ($ai_widget_exists ? 'yes' : 'no') . '<br>Roles: ' . htmlspecialchars($ai_widget_debug_roles, ENT_QUOTES, 'UTF-8') . '<br>Expected file: ' . htmlspecialchars($ai_widget_view, ENT_QUOTES, 'UTF-8') . '<br>Browser console: check messages beginning with <code>[AI Widget]</code>.</div>';
+}
+if ($ai_allowed && $ai_widget_exists) { $this->load->view('partials/ai_widget'); }
+?>
+
 <script>
     $(function () {
         $(document).on('click', '.close_notice', function () {

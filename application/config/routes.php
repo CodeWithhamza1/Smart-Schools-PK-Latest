@@ -14,6 +14,12 @@ $route['librarian/unauthorized'] = 'librarian/librarian/unauthorized';
 $route['404_override'] = 'welcome/show_404';
 $route['translate_uri_dashes'] = FALSE;
 $route['cron/(:any)'] = 'cron/index/$1';
+$route['ai_widget/ask'] = 'ai_widget/ask';
+$route['ai_widget/sessions'] = 'ai_widget/sessions';
+$route['ai_widget/history/(:any)'] = 'ai_widget/history/$1';
+$route['ai_widget/new_session'] = 'ai_widget/new_session';
+$route['ai_widget/delete_session/(:any)'] = 'ai_widget/delete_session/$1';
+$route['cron/ai_widget_cleanup/(:any)'] = 'cron/ai_widget_cleanup/$1';
 
 // ZKTeco attendance module routes.
 $route['api/attendance/health'] = 'api_attendance/health';
