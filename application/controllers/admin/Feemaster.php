@@ -7,7 +7,177 @@ class Feemaster extends Admin_Controller {
 
     function __construct() {
         parent::__construct();
+        $this->load->model('fee_generation_model');
         $this->sch_setting_detail = $this->setting_model->getSetting();
+    }
+
+    /**
+     * Unified monthly fee profile and generation workspace.
+     */
+    public function generateFee()
+    {
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_view')) {
+            access_denied();
+        }
+
+        $this->session->set_userdata('top_menu', 'Fees Collection');
+        $this->session->set_userdata('sub_menu', 'admin/feemaster/generateFee');
+
+        $settings = $this->setting_model->get();
+        $fee_due_days = !empty($settings) && isset($settings[0]['fee_due_days']) ? (int) $settings[0]['fee_due_days'] : 0;
+        $default_due_date = date('Y-m-d', strtotime('+' . max(0, $fee_due_days) . ' day'));
+        $operation_token = bin2hex(random_bytes(16));
+        $this->session->set_userdata('fee_generation_operation_token', $operation_token);
+
+        $data = array(
+            'title'             => 'Generate Fee',
+            'classlist'         => $this->class_model->get(),
+            'feetypeList'       => $this->feetype_model->get(),
+            'current_session'   => $this->setting_model->getCurrentSession(),
+            'current_session_name' => $this->setting_model->getCurrentSessionName(),
+            'default_year'      => (int) date('Y', strtotime($default_due_date)),
+            'default_month'     => (int) date('n', strtotime($default_due_date)),
+            'default_due_date'  => $default_due_date,
+            'operation_token'   => $operation_token,
+        );
+
+        $this->load->view('layout/header', $data);
+        $this->load->view('admin/feemaster/generate_fee', $data);
+        $this->load->view('layout/footer', $data);
+    }
+
+    public function loadGenerationStudents()
+    {
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_view')) {
+            return $this->jsonResponse(array('status' => 'fail', 'errors' => array('Access denied.')), 403);
+        }
+
+        try {
+            $payload = $this->validatedGenerationPayload(false, false);
+            $students = $this->fee_generation_model->getWorkspaceStudents(
+                $payload['class_id'],
+                $payload['section_id'],
+                $payload['year'],
+                $payload['month']
+            );
+            return $this->jsonResponse(array('status' => 'success', 'students' => $students));
+        } catch (Exception $e) {
+            return $this->jsonResponse(array('status' => 'fail', 'errors' => array($e->getMessage())), 422);
+        }
+    }
+
+    public function updateGenerationFees()
+    {
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_edit')) {
+            return $this->jsonResponse(array('status' => 'fail', 'errors' => array('You do not have permission to update fees.')), 403);
+        }
+
+        try {
+            $payload = $this->validatedGenerationPayload(true, true, 'update');
+            $result = $this->fee_generation_model->updateFees(
+                $payload,
+                $this->customlib->getStaffID(),
+                $payload['request_id']
+            );
+            return $this->jsonResponse($result, $result['status'] === 'success' ? 200 : 422);
+        } catch (Exception $e) {
+            return $this->jsonResponse(array('status' => 'fail', 'errors' => array($e->getMessage())), 422);
+        }
+    }
+
+    public function runGeneration()
+    {
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_add')) {
+            return $this->jsonResponse(array('status' => 'fail', 'errors' => array('You do not have permission to generate fees.')), 403);
+        }
+
+        try {
+            $payload = $this->validatedGenerationPayload(true, true, 'generate');
+            $result = $this->fee_generation_model->generateFees(
+                $payload,
+                $this->customlib->getStaffID(),
+                $payload['request_id']
+            );
+            return $this->jsonResponse($result, $result['status'] === 'success' ? 200 : 422);
+        } catch (Exception $e) {
+            return $this->jsonResponse(array('status' => 'fail', 'errors' => array($e->getMessage())), 422);
+        }
+    }
+
+    private function validatedGenerationPayload($require_students, $require_fees, $expected_action = null)
+    {
+        if ($this->input->server('REQUEST_METHOD') !== 'POST') {
+            throw new Exception('Only POST requests are allowed.');
+        }
+        $raw = $this->input->post('payload', false);
+        $payload = json_decode($raw, true);
+        if (!is_array($payload)) {
+            throw new Exception('Invalid fee request.');
+        }
+
+        $payload['class_id']  = isset($payload['class_id']) ? (int) $payload['class_id'] : 0;
+        $payload['section_id'] = isset($payload['section_id']) ? (int) $payload['section_id'] : 0;
+        $payload['year']       = isset($payload['year']) ? (int) $payload['year'] : 0;
+        $payload['month']      = isset($payload['month']) ? (int) $payload['month'] : 0;
+        $payload['due_date']   = isset($payload['due_date']) ? trim($payload['due_date']) : '';
+        $payload['students']   = isset($payload['students']) && is_array($payload['students']) ? $payload['students'] : array();
+        $payload['fees']       = isset($payload['fees']) && is_array($payload['fees']) ? $payload['fees'] : array();
+
+        if ($payload['class_id'] <= 0 || $payload['year'] < 2000 || $payload['year'] > 2100 || $payload['month'] < 1 || $payload['month'] > 12) {
+            throw new Exception('Select a valid class and billing month.');
+        }
+        $date = DateTime::createFromFormat('Y-m-d', $payload['due_date']);
+        if (!$date || $date->format('Y-m-d') !== $payload['due_date']) {
+            throw new Exception('Select a valid due date.');
+        }
+        if ((int) $date->format('Y') !== $payload['year'] || (int) $date->format('n') !== $payload['month']) {
+            throw new Exception('Due date must be inside the selected billing month.');
+        }
+        if ($require_students && empty($payload['students'])) {
+            throw new Exception('Select at least one student.');
+        }
+        if ($require_fees && empty($payload['fees'])) {
+            throw new Exception('Add at least one fee type.');
+        }
+
+        if ($require_students || $require_fees) {
+            $token = isset($payload['operation_token']) ? $payload['operation_token'] : '';
+            $session_token = (string) $this->session->userdata('fee_generation_operation_token');
+            if ($session_token === '' || !hash_equals($session_token, (string) $token)) {
+                throw new Exception('This fee form has expired. Reload the page and try again.');
+            }
+
+            $request_nonce = isset($payload['request_nonce']) ? trim((string) $payload['request_nonce']) : '';
+
+            // Keep pages opened before this fix working. Older JavaScript sent
+            // "token-action-timestamp" as request_id; only retain its nonce.
+            if (!preg_match('/^[0-9]{10,20}$/', $request_nonce)) {
+                $legacy_request_id = isset($payload['request_id']) ? trim((string) $payload['request_id']) : '';
+                if (preg_match('/([0-9]{10,20})$/', $legacy_request_id, $legacy_match)) {
+                    $request_nonce = $legacy_match[1];
+                }
+            }
+
+            // A malformed legacy page must not bypass idempotency or block a
+            // safe operation. Identical submissions receive the same fallback.
+            if (!preg_match('/^[0-9]{10,20}$/', $request_nonce)) {
+                $request_nonce = substr(hash('sha256', json_encode($payload)), 0, 20);
+            }
+
+            $action_name = $expected_action ? $expected_action : 'fee-operation';
+            $payload['request_nonce'] = $request_nonce;
+            $payload['request_id'] = 'fee-' . hash('sha256', $session_token . '|' . $action_name . '|' . $request_nonce);
+        }
+
+        return $payload;
+    }
+
+    private function jsonResponse(array $data, $status_code = 200)
+    {
+        return $this->output
+            ->set_status_header($status_code)
+            ->set_content_type('application/json')
+            ->set_output(json_encode($data));
     }
 
     function index() {
@@ -194,6 +364,8 @@ class Feemaster extends Admin_Controller {
     }
 
     function addYearly() {
+        redirect('admin/feemaster/generateFee');
+        return;
         // if(!$this->rbac->hasPrivilege('fees_master','can_add')){
         //        access_denied();
         //        }
@@ -286,6 +458,8 @@ class Feemaster extends Admin_Controller {
         //print_r($student_session_id);
     }
     function genrateFee($feetype_value_id,$clnd_month){
+        redirect('admin/feemaster/generateFee');
+        return;
         $year = date("Y");
         $date_new = $year."-".$clnd_month."-01";
         $date_new;
@@ -337,6 +511,8 @@ class Feemaster extends Admin_Controller {
     }
 
     function genrateFeeFeeStructure($feetype_value_id,$clnd_month){
+        redirect('admin/feemaster/generateFee');
+        return;
 //        echo $feetype_value_id . " - " . $clnd_month; die();
         $year = date("Y");
         $date_new = $year."-".$clnd_month."-01";
@@ -399,6 +575,8 @@ class Feemaster extends Admin_Controller {
     }
     function feeStructure()
     {
+        redirect('admin/feemaster/generateFee');
+        return;
         if (!$this->rbac->hasPrivilege('fees_group_assign', 'can_view')) {
             access_denied();
         }
@@ -427,6 +605,8 @@ class Feemaster extends Admin_Controller {
 
     function addFeeStructure()
     {
+        redirect('admin/feemaster/generateFee');
+        return;
         try {
             // Input validation
             $class_id = $this->input->post('class');

@@ -210,8 +210,7 @@ if ($this->module_lib->hasActive('fees_collection')) {
         if ($this->rbac->hasPrivilege('fees_master', 'can_view')) {
             ?>
                                 <li class="<?php echo set_Submenu('admin/feemaster'); ?>"><a href="<?php echo base_url(); ?>admin/feemaster"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('fees_master'); ?></a></li>
-                                <li class="<?php echo set_Submenu('admin/feemaster/feeStructure'); ?>"><a href="<?php echo base_url(); ?>admin/feemaster/feeStructure"><i class="fa fa-angle-double-right"></i> Fee Structure</a></li>
-                                <li class="<?php echo set_Submenu('admin/feemaster/addYearly'); ?>"><a href="<?php echo base_url(); ?>admin/feemaster/addYearly"><i class="fa fa-angle-double-right"></i> Fee Master(Year)</a></li>
+                                <li class="<?php echo set_Submenu('admin/feemaster/generateFee'); ?>"><a href="<?php echo base_url(); ?>admin/feemaster/generateFee"><i class="fa fa-angle-double-right"></i> Generate Fee</a></li>
                                 <?php
 }
 
@@ -234,7 +233,6 @@ if ($this->module_lib->hasActive('fees_collection')) {
         if ($this->rbac->hasPrivilege('fees_carry_forward', 'can_view')) {
             ?>
                                 <li class="<?php echo set_Submenu('feesforward/index'); ?>"><a href="<?php echo base_url('admin/feesforward'); ?>"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('fees_carry_forward'); ?></a></li>
-                                <li class="<?php echo set_Submenu('feesupdate/index'); ?>"><a href="<?php echo base_url('admin/feesupdate'); ?>"><i class="fa fa-angle-double-right"></i> <?php echo "Fees Update"; ?></a></li>
                                 <?php
 }
 

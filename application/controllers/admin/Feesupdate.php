@@ -19,9 +19,12 @@ class Feesupdate extends Admin_Controller {
     }
 
     function index() {
-        if (!$this->rbac->hasPrivilege('fees_carry_forward', 'can_view')) {
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_view')) {
             access_denied();
         }
+
+        redirect('admin/feemaster/generateFee');
+        return;
 
         $this->session->set_userdata('top_menu', 'Fees Collection');
         $this->session->set_userdata('sub_menu', 'feesupdate/index');
