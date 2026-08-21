@@ -7,81 +7,39 @@ class Ai_widget_model extends CI_Model
     public function __construct()
     {
         parent::__construct();
-        $this->load->model(array('student_model', 'attendance_model', 'studentsession_model', 'class_model', 'section_model', 'subject_model', 'timetable_model', 'staff_model', 'homework_model', 'book_model', 'bookissue_model', 'route_model', 'hostel_model', 'hostelroom_model', 'itemstock_model', 'income_model', 'expense_model', 'onlineexam_model', 'leaverequest_model', 'syllabus_model', 'enquiry_model', 'visitors_model', 'Complaint_Model' => 'complaint_model', 'general_call_model', 'dispatch_model', 'calendar_model', 'content_model'));
+        $this->load->model(array('student_model', 'attendance_model', 'studentsession_model', 'class_model', 'section_model', 'subject_model', 'timetable_model', 'staff_model', 'homework_model', 'book_model', 'bookissue_model', 'route_model', 'hostel_model', 'hostelroom_model', 'itemstock_model', 'income_model', 'expense_model', 'onlineexam_model', 'leaverequest_model', 'syllabus_model', 'enquiry_model', 'visitors_model', 'Complaint_Model' => 'complaint_model', 'general_call_model', 'dispatch_model', 'calendar_model', 'content_model', 'notification_model'));
         $this->current_session = $this->setting_model->getCurrentSession();
     }
 
     public function tool_definitions($question = '')
     {
-        $tools = array(
-            array('type' => 'function', 'function' => array(
-                'name' => 'search_students',
-                'description' => 'Search active students by name, admission number, or guardian name.',
-                'parameters' => array('type' => 'object', 'properties' => array(
-                    'query' => array('type' => 'string'),
-                    'class_id' => array('type' => 'integer'),
-                    'section_id' => array('type' => 'integer'),
-                    'limit' => array('type' => 'integer', 'minimum' => 1, 'maximum' => 50)
-                ), 'required' => array('query'))
-            )),
-            array('type' => 'function', 'function' => array(
-                'name' => 'get_student_profile',
-                'description' => 'Get a limited profile for one active current-session student.',
-                'parameters' => array('type' => 'object', 'properties' => array(
-                    'student_id' => array('type' => 'integer'),
-                    'admission_no' => array('type' => 'string')
-                ))
-            )),
-            array('type' => 'function', 'function' => array(
-                'name' => 'get_attendance_summary',
-                'description' => 'Summarize attendance logs for a date range and optional class/section.',
-                'parameters' => array('type' => 'object', 'properties' => array(
-                    'start_date' => array('type' => 'string', 'description' => 'YYYY-MM-DD'),
-                    'end_date' => array('type' => 'string', 'description' => 'YYYY-MM-DD'),
-                    'class_id' => array('type' => 'integer'),
-                    'section_id' => array('type' => 'integer'),
-                    'limit' => array('type' => 'integer', 'minimum' => 1, 'maximum' => 100)
-                ), 'required' => array('start_date', 'end_date'))
-            )),
-            array('type' => 'function', 'function' => array(
-                'name' => 'get_due_fees',
-                'description' => 'List current-session fee records with outstanding balances, optionally by class and section.',
-                'parameters' => array('type' => 'object', 'properties' => array(
-                    'class_id' => array('type' => 'integer'),
-                    'section_id' => array('type' => 'integer'),
-                    'limit' => array('type' => 'integer', 'minimum' => 1, 'maximum' => 1000)
-                ))
-            )),
-            array('type' => 'function', 'function' => array(
-                'name' => 'get_student_results',
-                'description' => 'Get published-style exam result rows for a student and optional exam.',
-                'parameters' => array('type' => 'object', 'properties' => array(
-                    'student_id' => array('type' => 'integer'),
-                    'exam_id' => array('type' => 'integer')
-                ), 'required' => array('student_id'))
-            ))
-        );
-        $all = array_merge($tools, $this->additional_tool_definitions());
-        if ($question === '') return $all;
-        $q = strtolower((string) $question); $selected = array();
-        $patterns = array(
-            'student' => '/student|pupil|admission|enrol/', 'attendance' => '/attendance|absent|present|late/',
-            'fee' => '/fee|fees|due|pending|payment|paid|balance/', 'class' => '/class|section|subject|timetable/',
-            'exam' => '/exam|result|mark|score|grade|test/', 'staff' => '/staff|teacher|employee|leave/',
-            'homework' => '/homework|assignment/', 'library' => '/library|book|borrow|return/',
-            'transport' => '/transport|vehicle|route|bus/', 'hostel' => '/hostel|room|boarding/',
-            'inventory' => '/inventory|stock|item|store/', 'income' => '/income|revenue|receipt/',
-            'expense' => '/expense|cost|spending/', 'notice' => '/notice|announcement|calendar|event/',
-            'complaint' => '/complaint|enquiry|visitor|call|dispatch/', 'content' => '/content|syllabus|lesson|online exam/'
-        );
-        $name_patterns = array('student' => '/student|search_students|count_students/', 'attendance' => '/attendance/', 'fee' => '/due_fee|income|expense|read_only/', 'class' => '/class|section|subject|timetable/', 'exam' => '/exam|result|syllabus/', 'staff' => '/staff|leave/', 'homework' => '/homework/', 'library' => '/library|book/', 'transport' => '/transport|route|vehicle/', 'hostel' => '/hostel/', 'inventory' => '/inventory|stock/', 'income' => '/income/', 'expense' => '/expense/', 'notice' => '/notice|calendar/', 'complaint' => '/complaint|enquir|visitor|call|dispatch/', 'content' => '/content|syllabus|online_exam/');
-        foreach ($all as $tool) {
-            $name = strtolower($tool['function']['name']); if (in_array($name, array('get_database_schema','read_only_sql','count_students'), true)) { $selected[] = $tool; continue; }
-            if ($name === 'read_only_query') continue;
-            foreach ($patterns as $key => $pattern) if (preg_match($pattern, $q) && isset($name_patterns[$key]) && preg_match($name_patterns[$key], $name)) { $selected[] = $tool; break; }
-        }
-        if (empty($selected)) return array_slice($all, 0, 3 + 2);
-        return $selected;
+        return array(array(
+            'type' => 'function',
+            'function' => array(
+                'name' => 'school_report',
+                'description' => 'Select one safe school report. Never provide SQL or database table names. Report types: student_count, student_search, student_profile, attendance_summary, pending_fee_summary, pending_fee_students, due_fees, student_results, classes, sections, subjects, timetable, staff_search, staff_profile, staff_leave, homework, library_books, library_due, transport_routes, transport_vehicles, hostels, inventory_stock, income, expenses, enquiries, visitors, complaints, phone_calls, dispatch_receive, calendar_events, learning_content, notices, online_exams, syllabus_status.',
+                'parameters' => array(
+                    'type' => 'object',
+                    'properties' => array(
+                        'report_type' => array('type' => 'string'),
+                        'query' => array('type' => 'string'),
+                        'student_id' => array('type' => 'integer'),
+                        'admission_no' => array('type' => 'string'),
+                        'staff_id' => array('type' => 'integer'),
+                        'class_id' => array('type' => 'integer'),
+                        'section_id' => array('type' => 'integer'),
+                        'exam_id' => array('type' => 'integer'),
+                        'start_date' => array('type' => 'string', 'description' => 'YYYY-MM-DD'),
+                        'end_date' => array('type' => 'string', 'description' => 'YYYY-MM-DD'),
+                        'month' => array('type' => 'integer'),
+                        'months' => array('type' => 'integer'),
+                        'category' => array('type' => 'string'),
+                        'limit' => array('type' => 'integer')
+                    ),
+                    'required' => array('report_type')
+                )
+            )
+        ));
     }
 
     private function additional_tool_definitions()
@@ -290,6 +248,43 @@ class Ai_widget_model extends CI_Model
         }
     }
 
+    public function execute_school_report($args, $role, $user_id = 0)
+    {
+        if (!$this->is_admin_role($role)) return array('report_error' => 'This report is admin-only.');
+        $type = strtolower(trim((string) (isset($args['report_type']) ? $args['report_type'] : '')));
+        $type = str_replace(array('get_', 'search_', 'report_', ' '), array('', '', '', '_'), $type);
+        $aliases = array(
+            'students_count' => 'student_count', 'count_students' => 'student_count', 'students' => 'student_search',
+            'pending_fees' => 'pending_fee_summary', 'fee_summary' => 'pending_fee_summary', 'fees_due' => 'due_fees',
+            'pending_fee_report' => 'pending_fee_students', 'student_pending_fees' => 'pending_fee_students',
+            'attendance' => 'attendance_summary', 'results' => 'student_results', 'staff' => 'staff_search',
+            'income_report' => 'income', 'expense_report' => 'expenses', 'library' => 'library_books'
+        );
+        if (isset($aliases[$type])) $type = $aliases[$type];
+        $args += array('query' => '', 'student_id' => 0, 'admission_no' => '', 'staff_id' => 0, 'class_id' => 0, 'section_id' => 0, 'exam_id' => 0, 'category' => '');
+        $args['limit'] = $this->safe_limit(isset($args['limit']) ? $args['limit'] : 25, 50);
+        if (empty($args['start_date'])) $args['start_date'] = date('Y-m-d', strtotime('-30 days'));
+        if (empty($args['end_date'])) $args['end_date'] = date('Y-m-d');
+        if ($type === 'pending_fee_summary') return $this->pending_fee_month(!empty($args['month']) ? (int) $args['month'] : (int) date('n'), $role, $user_id);
+        if ($type === 'pending_fee_students') return $this->pending_fee_students(!empty($args['months']) ? (int) $args['months'] : 2, $role, $user_id, $args['limit']);
+        $map = array(
+            'student_count' => 'count_students', 'student_search' => 'search_students', 'student_profile' => 'get_student_profile',
+            'attendance_summary' => 'get_attendance_summary', 'due_fees' => 'get_due_fees', 'student_results' => 'get_student_results',
+            'classes' => 'get_classes', 'sections' => 'get_sections', 'subjects' => 'get_subjects', 'timetable' => 'get_class_timetable',
+            'staff_search' => 'search_staff', 'staff_profile' => 'get_staff_profile', 'staff_leave' => 'get_staff_leave_requests',
+            'homework' => 'get_homework', 'library_books' => 'get_library_books', 'library_due' => 'get_library_due_books',
+            'transport_routes' => 'get_transport_routes', 'transport_vehicles' => 'get_transport_vehicles', 'hostels' => 'get_hostels',
+            'inventory_stock' => 'get_inventory_stock', 'income' => 'get_income_report', 'expenses' => 'get_expense_report',
+            'enquiries' => 'get_enquiries', 'visitors' => 'get_visitors', 'complaints' => 'get_complaints',
+            'phone_calls' => 'get_phone_calls', 'dispatch_receive' => 'get_dispatch_receive', 'calendar_events' => 'get_calendar_events',
+            'learning_content' => 'get_learning_content', 'notices' => 'get_notices', 'online_exams' => 'get_online_exams',
+            'syllabus_status' => 'get_syllabus_status'
+        );
+        if (!isset($map[$type])) return array('report_error' => 'The requested report type is not supported yet.', 'report_type' => $type);
+        try { return $this->execute_tool($map[$type], $args, $role, $user_id); }
+        catch (Exception $e) { log_message('error', 'School report failed: type=' . $type . '; reason=' . $e->getMessage()); return array('report_error' => 'The report could not be generated with the supplied filters.', 'report_type' => $type); }
+    }
+
     private function is_fee_month_sql($sql) { return (bool) (preg_match('/\b(fee|fees|payment|collection|balance|due)\b/i', $sql) && $this->fee_month_from_sql($sql)); }
     private function fee_month_from_sql($sql) { $months = array('january'=>1,'february'=>2,'march'=>3,'april'=>4,'may'=>5,'june'=>6,'july'=>7,'august'=>8,'september'=>9,'october'=>10,'november'=>11,'december'=>12); $q = strtolower((string) $sql); foreach ($months as $name => $number) if (strpos($q, $name) !== false) return $number; if (preg_match('/\bclnd_month\s*=\s*[\'\"]?(1[0-2]|[1-9])[\'\"]?/i', $q, $m)) return (int) $m[1]; return 0; }
 
@@ -358,6 +353,19 @@ class Ai_widget_model extends CI_Model
         $groups = array(); foreach ($this->db->get()->result_array() as $row) { $key = $row['fee_master_id'] . ':' . $row['fee_item_id']; if (!isset($groups[$key])) $groups[$key] = array('due' => (float) $row['amount'], 'paid' => 0.0, 'discount' => 0.0); if (!empty($row['amount_detail'])) { $details = json_decode($row['amount_detail'], true); if (is_array($details)) foreach ($details as $detail) { if (is_array($detail)) { $groups[$key]['paid'] += (float) (isset($detail['amount']) ? $detail['amount'] : 0); $groups[$key]['discount'] += (float) (isset($detail['amount_discount']) ? $detail['amount_discount'] : 0); } } } }
         $total = 0.0; foreach ($groups as $group) $total += max(0, $group['due'] - $group['paid'] - $group['discount']);
         return array('month' => $month, 'total_pending' => round($total, 2), 'fee_items' => count($groups));
+    }
+
+    public function pending_fee_students($months, $role, $user_id, $limit = 25)
+    {
+        $months = max(1, min(12, (int) $months)); $month_numbers = array(); $month_names = array();
+        for ($i = 1; $i <= $months; $i++) { $time = strtotime('-' . $i . ' month'); $month_numbers[] = (int) date('n', $time); $month_names[] = date('F', $time); }
+        $this->db->select('sfm.id AS fee_master_id,fg.id AS fee_item_id,ss.student_id,s.admission_no,s.firstname,s.middlename,s.lastname,s.guardian_name,s.guardian_phone,c.class,sec.section,fg.amount,fg.clnd_month,sfd.amount_detail')->from('student_fees_master sfm');
+        $this->db->join('student_session ss', 'ss.id=sfm.student_session_id')->join('students s', 's.id=ss.student_id')->join('classes c', 'c.id=ss.class_id')->join('sections sec', 'sec.id=ss.section_id')->join('fee_groups_feetype fg', 'fg.fee_session_group_id=sfm.fee_session_group_id', 'inner')->join('student_fees_deposite sfd', 'sfd.student_fees_master_id=sfm.id AND sfd.fee_groups_feetype_id=fg.id', 'left');
+        $this->db->where(array('ss.session_id' => $this->current_session, 's.is_active' => 'yes'))->where_in('fg.clnd_month', $month_numbers); $this->apply_teacher_scope($role, $user_id, 'ss.class_id', 'ss.section_id');
+        $items = array(); foreach ($this->db->get()->result_array() as $row) { $key = $row['fee_master_id'] . ':' . $row['fee_item_id']; if (!isset($items[$key])) $items[$key] = array('student' => $row, 'due' => (float) $row['amount'], 'paid' => 0.0, 'discount' => 0.0); if (!empty($row['amount_detail'])) { $details = json_decode($row['amount_detail'], true); if (is_array($details)) foreach ($details as $detail) if (is_array($detail)) { $items[$key]['paid'] += (float) (isset($detail['amount']) ? $detail['amount'] : 0); $items[$key]['discount'] += (float) (isset($detail['amount_discount']) ? $detail['amount_discount'] : 0); } } }
+        $students = array(); foreach ($items as $item) { $pending = max(0, $item['due'] - $item['paid'] - $item['discount']); if ($pending <= 0) continue; $row = $item['student']; $id = (int) $row['student_id']; if (!isset($students[$id])) $students[$id] = array('student_id' => $id, 'admission_no' => $row['admission_no'], 'student_name' => trim($row['firstname'] . ' ' . $row['middlename'] . ' ' . $row['lastname']), 'guardian_name' => $row['guardian_name'], 'guardian_phone' => $row['guardian_phone'], 'class' => $row['class'], 'section' => $row['section'], 'pending_pkr' => 0.0); $students[$id]['pending_pkr'] += $pending; }
+        $rows = array_values($students); usort($rows, function ($a, $b) { return $a['pending_pkr'] < $b['pending_pkr'] ? 1 : -1; }); foreach ($rows as &$row) $row['pending_pkr'] = round($row['pending_pkr'], 2); unset($row);
+        return array('months' => $month_names, 'total_students' => count($rows), 'rows' => array_slice($rows, 0, $this->safe_limit($limit, 50)));
     }
 
     private function tool_due_fees($a, $role, $user_id)
