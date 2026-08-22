@@ -171,7 +171,9 @@ if ($this->rbac->hasPrivilege('student_houses', 'can_view')) {
 }
 }
 
-if ($this->module_lib->hasActive('fees_collection')) {
+// Legacy Fees Collection menu is intentionally disabled. Its controllers,
+// routes and business logic remain available to the new Fee Workspace.
+if (false && $this->module_lib->hasActive('fees_collection')) {
     if (($this->rbac->hasPrivilege('collect_fees', 'can_view') ||
         $this->rbac->hasPrivilege('search_fees_payment', 'can_view') ||
         $this->rbac->hasPrivilege('search_due_fees', 'can_view') ||
@@ -257,8 +259,7 @@ if ($this->module_lib->hasActive('fees_collection')) {
 }
 }
 
-// Parallel fee workspace. The original Fees Collection menu above remains
-// unchanged while staff validate the consolidated navigation.
+// Consolidated Fee Workspace navigation.
 if ($this->module_lib->hasActive('fees_collection')) {
     $fee_workspace_collect = $this->rbac->hasPrivilege('collect_fees', 'can_view');
     $fee_workspace_generate = $this->rbac->hasPrivilege('fees_master', 'can_view');
@@ -291,8 +292,8 @@ if ($this->module_lib->hasActive('fees_collection')) {
                     </li>
                 <?php } ?>
                 <?php if ($fee_workspace_generate) { ?>
-                    <li class="<?php echo set_Submenu('admin/feeworkspace/generate'); ?>">
-                        <a href="<?php echo site_url('admin/feeworkspace/generate'); ?>"><i class="fa fa-angle-double-right"></i> Generate Fees</a>
+                    <li class="<?php echo set_Submenu('admin/feemaster/generateFee'); ?>">
+                        <a href="<?php echo site_url('admin/feemaster/generateFee'); ?>"><i class="fa fa-angle-double-right"></i> Generate Fee</a>
                     </li>
                 <?php } ?>
                 <?php if ($fee_workspace_collect) { ?>

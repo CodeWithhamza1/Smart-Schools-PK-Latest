@@ -20,7 +20,7 @@ class Feemaster extends Admin_Controller {
             access_denied();
         }
 
-        $this->session->set_userdata('top_menu', 'Fees Collection');
+        $this->session->set_userdata('top_menu', 'Fee Workspace');
         $this->session->set_userdata('sub_menu', 'admin/feemaster/generateFee');
 
         $settings = $this->setting_model->get();
