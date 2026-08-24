@@ -664,6 +664,18 @@
     }
 </style>
 
+<style>
+    .quick-exam-dashboard-widget { margin: 20px 0; border: 0; border-radius: 12px; background: linear-gradient(135deg, #334155, #4f46e5); color: #fff; box-shadow: 0 10px 25px rgba(15, 23, 42, .15); }
+    .quick-exam-dashboard-widget .box-header { border-bottom: 1px solid rgba(255,255,255,.18); }
+    .quick-exam-dashboard-widget .box-title, .quick-exam-dashboard-widget .box-header a { color: #fff; }
+    .quick-exam-dashboard-widget .box-header a { margin-top: -5px; }
+    .quick-exam-dashboard-widget .quick-exam-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .quick-exam-dashboard-widget .quick-exam-pill { padding: 5px 10px; border-radius: 999px; background: rgba(255,255,255,.16); font-size: 12px; }
+    .quick-exam-dashboard-widget .table { margin-bottom: 0; color: #fff; }
+    .quick-exam-dashboard-widget .table > thead > tr > th, .quick-exam-dashboard-widget .table > tbody > tr > td { border-color: rgba(255,255,255,.14); }
+    .quick-exam-dashboard-widget .quick-exam-empty { padding: 8px 0 0; opacity: .85; }
+</style>
+
 <div class="content-wrapper" style="min-height: 946px;">
 
     <section class="content">
@@ -1111,6 +1123,50 @@
                     </div>
                 </div>
             </div>
+            <?php if ($this->rbac->hasPrivilege('exam_group', 'can_view')) { ?>
+                <?php
+                $quick_exam_widget_data = (isset($quick_exam_widget) && is_array($quick_exam_widget)) ? $quick_exam_widget : array();
+                $quick_exam_rows = isset($quick_exam_widget_data['rows']) ? $quick_exam_widget_data['rows'] : array();
+                $quick_exam_total_tests = isset($quick_exam_widget_data['total_tests']) ? (int) $quick_exam_widget_data['total_tests'] : 0;
+                $quick_exam_completed_tests = isset($quick_exam_widget_data['completed_tests']) ? (int) $quick_exam_widget_data['completed_tests'] : 0;
+                $quick_exam_pending_tests = isset($quick_exam_widget_data['pending_tests']) ? (int) $quick_exam_widget_data['pending_tests'] : 0;
+                ?>
+                <div class="col-md-12">
+                    <div class="box quick-exam-dashboard-widget">
+                        <div class="box-header with-border">
+                            <i class="fa fa-pencil-square-o"></i>
+                            <h3 class="box-title">Test Management</h3>
+                            <a href="<?php echo site_url('admin/quickexam'); ?>" class="btn btn-xs btn-default pull-right">Test Detail</a>
+                        </div>
+                        <div class="box-body">
+                            <div class="quick-exam-stats">
+                                <span class="quick-exam-pill">Tests <strong><?php echo $quick_exam_total_tests; ?></strong></span>
+                                <span class="quick-exam-pill">Entered <strong><?php echo $quick_exam_completed_tests; ?></strong></span>
+                                <span class="quick-exam-pill">Pending <strong><?php echo $quick_exam_pending_tests; ?></strong></span>
+                            </div>
+                            <?php if (!empty($quick_exam_rows)) { ?>
+                                <div class="table-responsive">
+                                    <table class="table table-condensed">
+                                        <thead><tr><th>Event Name</th><th>Class</th><th>T</th><th>P</th></tr></thead>
+                                        <tbody>
+                                            <?php foreach ($quick_exam_rows as $quick_exam_row) { ?>
+                                                <tr>
+                                                    <td><?php echo html_escape($quick_exam_row['event_name']); ?></td>
+                                                    <td><?php echo html_escape($quick_exam_row['class_label']); ?></td>
+                                                    <td><?php echo (int) $quick_exam_row['completed_tests']; ?></td>
+                                                    <td><?php echo (int) $quick_exam_row['pending_tests']; ?></td>
+                                                </tr>
+                                            <?php } ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php } else { ?>
+                                <div class="quick-exam-empty">No quick tests found yet. Create tests from the Quick Examination page.</div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                </div>
+            <?php } ?>
         </div>
 
 </div>

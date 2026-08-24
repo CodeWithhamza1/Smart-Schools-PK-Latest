@@ -14,6 +14,7 @@
         {
             parent::__construct();
             $this->load->model("classteacher_model");
+            $this->load->model("quickexam_model");
             $this->load->model("Staff_model");
             $this->load->library('Enc_lib');
             $this->load->driver('cache', array('adapter' => 'file', 'backup' => 'dummy'));
@@ -309,6 +310,7 @@
             $data['getTotalStaff_data']   = $getTotalStaff;
             if ($getTotalStaff > 0) {$percentTotalStaff_data = ($Staffattendence * 100) / ($getTotalStaff);} else { $percentTotalStaff_data = '0';}
             $data['percentTotalStaff_data'] = $percentTotalStaff_data;
+            $data['quick_exam_widget'] = $this->quickexam_model->getDashboardWidgetData($this->setting_model->getCurrentSession());
             $data['sch_setting']            = $this->sch_setting_detail;
 
             // Get pending annual charges for current month
@@ -657,6 +659,7 @@
             $data['getTotalStaff_data']   = $getTotalStaff;
             if ($getTotalStaff > 0) {$percentTotalStaff_data = ($Staffattendence * 100) / ($getTotalStaff);} else { $percentTotalStaff_data = '0';}
             $data['percentTotalStaff_data'] = $percentTotalStaff_data;
+            $data['quick_exam_widget'] = $this->quickexam_model->getDashboardWidgetData($this->setting_model->getCurrentSession());
             $data['sch_setting']            = $this->sch_setting_detail;
 
             // Get pending annual charges for current month

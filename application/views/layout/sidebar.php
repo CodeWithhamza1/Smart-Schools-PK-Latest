@@ -453,6 +453,7 @@ if ($this->module_lib->hasActive('examination')) {
 
                             <?php if ($this->rbac->hasPrivilege('exam_group', 'can_view')) {?>
                                 <li class="<?php echo set_Submenu('Examinations/examgroup'); ?>"><a href="<?php echo site_url('admin/examgroup'); ?>"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('exam') . " " . $this->lang->line('group') ?></a></li>
+                                <li class="<?php echo set_Submenu('Examinations/quickexam'); ?>"><a href="<?php echo site_url('admin/quickexam'); ?>"><i class="fa fa-angle-double-right"></i> Quick Examination</a></li>
                             <?php }
         ?>
                             <li class="<?php echo set_Submenu('Examinations/Examschedule'); ?>"><a href="<?php echo site_url('admin/exam_schedule'); ?>"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('exam_schedule'); ?></a></li>
