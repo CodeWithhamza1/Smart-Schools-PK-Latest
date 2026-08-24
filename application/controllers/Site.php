@@ -32,6 +32,11 @@ class Site extends Public_Controller
         return 'ss_remember_' . $type;
     }
 
+    private function remember_cookie_request_name($type)
+    {
+        return (string) $this->config->item('cookie_prefix') . $this->remember_cookie_name($type);
+    }
+
     private function remember_cookie_key()
     {
         $key = $this->config->item('encryption_key');
@@ -99,38 +104,86 @@ class Site extends Public_Controller
         return hash_hmac('sha256', $type . '|' . $id . '|' . $password, $this->remember_cookie_key());
     }
 
+    private function encode_remember_payload($payload)
+    {
+        return rtrim(strtr(base64_encode(json_encode($payload)), '+/', '-_'), '=');
+    }
+
+    private function decode_remember_payload($payload)
+    {
+        if (!is_string($payload) || $payload === '') {
+            return false;
+        }
+
+        // Accept both the new URL-safe value and cookies created by the old code.
+        $encoded = strtr($payload, '-_', '+/');
+        $padding = strlen($encoded) % 4;
+        if ($padding) {
+            $encoded .= str_repeat('=', 4 - $padding);
+        }
+
+        $json = base64_decode($encoded, true);
+        if ($json === false) {
+            return false;
+        }
+
+        $decoded = json_decode($json, true);
+        return is_array($decoded) ? $decoded : false;
+    }
+
     private function set_remember_cookie($type, $id, $password)
     {
-        $expires = time() + (86400 * 30);
-        $payload = base64_encode(json_encode(array(
+        $lifetime = 86400 * 30;
+        $payload = $this->encode_remember_payload(array(
             'type' => $type,
             'id'   => (int) $id,
             'sig'  => $this->create_remember_signature($type, $id, $password),
-        )));
+            'exp'  => time() + $lifetime,
+        ));
 
-        setcookie($this->remember_cookie_name($type), $payload, $expires, '/', '', false, true);
+        $this->input->set_cookie(array(
+            'name'     => $this->remember_cookie_name($type),
+            'value'    => $payload,
+            'expire'   => $lifetime,
+            'httponly' => true,
+        ));
     }
 
     private function clear_remember_cookie($type)
     {
-        setcookie($this->remember_cookie_name($type), '', time() - 3600, '/', '', false, true);
-        unset($_COOKIE[$this->remember_cookie_name($type)]);
+        $this->input->set_cookie(array(
+            'name'     => $this->remember_cookie_name($type),
+            'value'    => '',
+            'expire'   => -3600,
+            'httponly' => true,
+        ));
+
+        unset($_COOKIE[$this->remember_cookie_request_name($type)]);
     }
 
     private function get_remember_cookie($type)
     {
-        $cookie = $this->input->cookie($this->remember_cookie_name($type), true);
+        // This value is authenticated below; XSS filtering an encoded token can
+        // alter it before signature verification and make valid cookies unusable.
+        $cookie = $this->input->cookie($this->remember_cookie_request_name($type), false);
         if (empty($cookie)) {
             return false;
         }
 
-        $decoded = json_decode(base64_decode($cookie), true);
-        if (!is_array($decoded) || empty($decoded['type']) || empty($decoded['id']) || empty($decoded['sig'])) {
+        $decoded = $this->decode_remember_payload($cookie);
+        if (
+            !is_array($decoded)
+            || empty($decoded['type'])
+            || empty($decoded['id'])
+            || empty($decoded['sig'])
+            || !ctype_digit((string) $decoded['id'])
+            || !preg_match('/^[a-f0-9]{64}$/', $decoded['sig'])
+        ) {
             $this->clear_remember_cookie($type);
             return false;
         }
 
-        if ($decoded['type'] !== $type) {
+        if ($decoded['type'] !== $type || (isset($decoded['exp']) && (int) $decoded['exp'] < time())) {
             $this->clear_remember_cookie($type);
             return false;
         }
