@@ -171,9 +171,9 @@ if ($this->rbac->hasPrivilege('student_houses', 'can_view')) {
 }
 }
 
-// Legacy Fees Collection menu is intentionally disabled. Its controllers,
-// routes and business logic remain available to the new Fee Workspace.
-if (false && $this->module_lib->hasActive('fees_collection')) {
+// Keep the original Fees Collection navigation available alongside the
+// consolidated Fee Workspace so existing workflows remain directly accessible.
+if ($this->module_lib->hasActive('fees_collection')) {
     if (($this->rbac->hasPrivilege('collect_fees', 'can_view') ||
         $this->rbac->hasPrivilege('search_fees_payment', 'can_view') ||
         $this->rbac->hasPrivilege('search_due_fees', 'can_view') ||
