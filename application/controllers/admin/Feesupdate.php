@@ -23,9 +23,6 @@ class Feesupdate extends Admin_Controller {
             access_denied();
         }
 
-        redirect('admin/feemaster/generateFee');
-        return;
-
         $this->session->set_userdata('top_menu', 'Fees Collection');
         $this->session->set_userdata('sub_menu', 'feesupdate/index');
         $data['title'] = 'Add Feesforward';
