@@ -62,6 +62,35 @@ class Welcome extends Front_Controller
     }
 
     public function loginPage() {
+        // The root URL is also the public landing page. If a session is still
+        // active, do not show Login/Signup again.
+        if ($this->session->has_userdata('admin')) {
+            redirect('admin/admin/dashboard');
+        }
+        if ($this->session->has_userdata('student')) {
+            redirect('user/user/choose');
+        }
+
+        // A remembered login is restored by Site::login()/userlogin(). Send
+        // those requests through the normal restoration path before rendering
+        // the public landing page. Support the configured cookie prefix and
+        // the unprefixed legacy cookie name.
+        $cookie_prefix = (string) $this->config->item('cookie_prefix');
+        $remember_admin = $this->input->cookie($cookie_prefix . 'ss_remember_admin', false);
+        $remember_user  = $this->input->cookie($cookie_prefix . 'ss_remember_user', false);
+        if (empty($remember_admin)) {
+            $remember_admin = $this->input->cookie('ss_remember_admin', false);
+        }
+        if (empty($remember_user)) {
+            $remember_user = $this->input->cookie('ss_remember_user', false);
+        }
+        if (!empty($remember_admin)) {
+            redirect('site/login');
+        }
+        if (!empty($remember_user)) {
+            redirect('site/userlogin');
+        }
+
         $setting_result = $this->setting_model->get();
         $school = $this->setting_model->get();
         $data['name'] = $school[0]['name'];

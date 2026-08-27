@@ -77,6 +77,23 @@
                                                 $count++;
                                             }
                                             ?>
+                                            <?php foreach ($directoryfileList as $data) { ?>
+                                                <tr>
+                                                    <td width="80%" class="mailbox-name"><a href="#"><?php echo html_escape($data); ?></a></td>
+                                                    <td class="mailbox-name">
+                                                        <a href="<?php echo site_url('admin/admin/download_directory_backup/' . rawurlencode($data)); ?>" class="btn btn-success btn-xs"><i class="fa fa-download"></i> <?php echo $this->lang->line('download'); ?></a>
+                                                    </td>
+                                                    <?php if ($this->rbac->hasPrivilege('restore', 'can_view')) { ?><td></td><?php } ?>
+                                                    <td class="mailbox-name">
+                                                        <?php if ($this->rbac->hasPrivilege('backup', 'can_delete')) { ?>
+                                                            <form class="formdelete" method="post" action="<?php echo site_url('admin/admin/drop_directory_backup/' . rawurlencode($data)); ?>">
+                                                                <?php echo $this->customlib->getCSRF(); ?>
+                                                                <button class="btn btn-primary btn-xs btn-danger" type="submit"><i class="fa fa-trash"></i> <?php echo $this->lang->line('delete'); ?></button>
+                                                            </form>
+                                                        <?php } ?>
+                                                    </td>
+                                                </tr>
+                                            <?php } ?>
                                         </tbody>
                                     </table>
                                 </div>

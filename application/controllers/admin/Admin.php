@@ -790,11 +790,12 @@
                     }
                 }
                 if ($this->input->post('backup') == "backup") {
-                    $this->session->set_flashdata('msg', '<div class="alert alert-success text-left">Backup created successfully!</div>');
                     $this->load->helper('download');
                     $this->load->dbutil();
+                    $this->load->helper('file');
                     $version  = $this->customlib->getAppVersion();
-                    $filename = "db_ver_" . $version . '_' . date("Y-m-d_H-i-s") . ".sql";
+                    $timestamp = date("Y-m-d_H-i-s");
+                    $filename = "db_ver_" . $version . '_' . $timestamp . ".sql";
                     $prefs    = array(
                         'ignore'     => array(),
                         'format'     => 'txt',
@@ -804,11 +805,24 @@
                         'newline'    => "\n",
                     );
                     $backup = $this->dbutil->backup($prefs);
-                    $this->load->helper('file');
-                    write_file('./backup/database_backup/' . $filename, $backup);
-                    redirect('admin/admin/backup');
-                    force_download($filename, $backup);
-                    $this->session->set_flashdata('feedback', 'Success message for client to see');
+                    $database_path = FCPATH . 'backup/database_backup/';
+                    if (!is_dir($database_path)) {
+                        mkdir($database_path, 0755, true);
+                    }
+                    write_file($database_path . $filename, $backup);
+
+                    $directory_filename = 'directory_backup_' . $timestamp . '.zip';
+                    $directory_path = FCPATH . 'backup/directory_backup/';
+                    if (!is_dir($directory_path)) {
+                        mkdir($directory_path, 0755, true);
+                    }
+                    $directory_backup_created = $this->create_directory_backup($directory_path . $directory_filename);
+
+                    if ($directory_backup_created) {
+                        $this->session->set_flashdata('msg', '<div class="alert alert-success text-left">Database and directory backups created successfully!</div>');
+                    } else {
+                        $this->session->set_flashdata('msg', '<div class="alert alert-warning text-left">Database backup created, but the directory backup could not be created. Check folder permissions and PHP ZipArchive support.</div>');
+                    }
                     redirect('admin/admin/backup');
                 } else if ($this->input->post('backup') == "restore") {
                     $folder_name  = 'database_backup';
@@ -887,6 +901,15 @@
                 }
             }
             $data['dbfileList']  = $result;
+            $directory_dir = FCPATH . 'backup/directory_backup/';
+            $data['directoryfileList'] = array();
+            if (is_dir($directory_dir)) {
+                foreach (scandir($directory_dir) as $value) {
+                    if ($value !== '.' && $value !== '..' && is_file($directory_dir . $value)) {
+                        $data['directoryfileList'][] = $value;
+                    }
+                }
+            }
             $setting_result      = $this->setting_model->get();
             $data['settinglist'] = $setting_result;
             $this->load->view('layout/header', $data);
@@ -971,6 +994,36 @@
             force_download($name, $data);
         }
 
+        public function download_directory_backup($file)
+        {
+            if (!$this->rbac->hasPrivilege('backup', 'can_view')) {
+                access_denied();
+            }
+
+            $file = basename($file);
+            $filepath = FCPATH . 'backup/directory_backup/' . $file;
+            if (!is_file($filepath) || strtolower(pathinfo($filepath, PATHINFO_EXTENSION)) !== 'zip') {
+                show_404();
+            }
+
+            // Stream the archive instead of loading the complete directory backup
+            // into PHP memory. Large application archives otherwise fail with a
+            // blank response when memory_limit is reached.
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            set_time_limit(0);
+            header('Content-Description: File Transfer');
+            header('Content-Type: application/zip');
+            header('Content-Disposition: attachment; filename="' . $file . '"');
+            header('Content-Transfer-Encoding: binary');
+            header('Content-Length: ' . filesize($filepath));
+            header('Cache-Control: no-cache, must-revalidate');
+            header('Pragma: public');
+            readfile($filepath);
+            exit;
+        }
+
         public function dropbackup($file)
         {
             if (!$this->rbac->hasPrivilege('backup', 'can_delete')) {
@@ -978,6 +1031,64 @@
             }
             unlink('./backup/database_backup/' . $file);
             redirect('admin/admin/backup');
+        }
+
+        public function drop_directory_backup($file)
+        {
+            if (!$this->rbac->hasPrivilege('backup', 'can_delete')) {
+                access_denied();
+            }
+
+            $file = basename($file);
+            $filepath = FCPATH . 'backup/directory_backup/' . $file;
+            if (is_file($filepath) && strtolower(pathinfo($filepath, PATHINFO_EXTENSION)) === 'zip') {
+                unlink($filepath);
+            }
+            redirect('admin/admin/backup');
+        }
+
+        private function create_directory_backup($archive_path)
+        {
+            if (!class_exists('ZipArchive')) {
+                return false;
+            }
+
+            $root = realpath(FCPATH);
+            if ($root === false) {
+                return false;
+            }
+            $archive_path = realpath(dirname($archive_path)) . DIRECTORY_SEPARATOR . basename($archive_path);
+            $archive = new ZipArchive();
+            if ($archive->open($archive_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+                return false;
+            }
+
+            $backup_root = realpath(FCPATH . 'backup');
+            $git_root = realpath(FCPATH . '.git');
+            try {
+                $iterator = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+                    RecursiveIteratorIterator::LEAVES_ONLY
+                );
+                foreach ($iterator as $file) {
+                    if (!$file->isFile()) {
+                        continue;
+                    }
+                    $path = $file->getRealPath();
+                    if ($path === false || $path === $archive_path || ($backup_root && strpos($path, $backup_root . DIRECTORY_SEPARATOR) === 0) || ($git_root && strpos($path, $git_root . DIRECTORY_SEPARATOR) === 0)) {
+                        continue;
+                    }
+                    $relative = ltrim(str_replace('\\', '/', substr($path, strlen($root))), '/');
+                    $archive->addFile($path, $relative);
+                }
+            } catch (UnexpectedValueException $exception) {
+                $archive->close();
+                @unlink($archive_path);
+                log_message('error', 'Directory backup failed: ' . $exception->getMessage());
+                return false;
+            }
+
+            return $archive->close();
         }
 
         public function search()

@@ -151,21 +151,36 @@ class Site extends Public_Controller
 
     private function clear_remember_cookie($type)
     {
-        $this->input->set_cookie(array(
-            'name'     => $this->remember_cookie_name($type),
-            'value'    => '',
-            'expire'   => -3600,
-            'httponly' => true,
+        $cookie_names = array_unique(array(
+            $this->remember_cookie_name($type),
+            $this->remember_cookie_request_name($type),
         ));
-
-        unset($_COOKIE[$this->remember_cookie_request_name($type)]);
+        foreach ($cookie_names as $cookie_name) {
+            $this->input->set_cookie(array(
+                'name'     => $cookie_name,
+                'value'    => '',
+                'expire'   => -3600,
+                'httponly' => true,
+            ));
+            unset($_COOKIE[$cookie_name]);
+        }
     }
 
     private function get_remember_cookie($type)
     {
         // This value is authenticated below; XSS filtering an encoded token can
         // alter it before signature verification and make valid cookies unusable.
-        $cookie = $this->input->cookie($this->remember_cookie_request_name($type), false);
+        $cookie = false;
+        $cookie_names = array_unique(array(
+            $this->remember_cookie_request_name($type),
+            $this->remember_cookie_name($type),
+        ));
+        foreach ($cookie_names as $cookie_name) {
+            $cookie = $this->input->cookie($cookie_name, false);
+            if (!empty($cookie)) {
+                break;
+            }
+        }
         if (empty($cookie)) {
             return false;
         }
@@ -265,6 +280,7 @@ class Site extends Public_Controller
         }
 
         $this->login_admin_from_staff($staff);
+        $this->set_remember_cookie('admin', $staff->id, $staff->password);
         return true;
     }
 
@@ -377,6 +393,7 @@ class Site extends Public_Controller
         }
 
         $this->login_user_from_result($result);
+        $this->set_remember_cookie('user', $user->id, $user->password);
         return true;
     }
 
