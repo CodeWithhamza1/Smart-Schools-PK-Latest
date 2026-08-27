@@ -1,9 +1,7 @@
 .agents
 .codex
 .claude
-
-# VS Code settings in any directory.
-.vscode
+.vscode/
 
 # Dot-prefixed files and folders, except this ignore file.
 .[!.]*
