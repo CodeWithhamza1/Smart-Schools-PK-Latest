@@ -6,7 +6,7 @@ if (!defined('BASEPATH')) {
 class Pushnotification {
     public $CI;
     private $serviceAccountPath;
-    private $projectId = 'unique-school-shama-chap';
+    private $projectId = '';
     private $fcmUrl;
     private $accessToken;
     private $serviceAccount;
