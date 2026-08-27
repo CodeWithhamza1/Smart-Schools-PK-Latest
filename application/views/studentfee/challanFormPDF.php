@@ -91,6 +91,41 @@
             overflow-wrap: anywhere;
             text-align: center;
         }
+
+        .voucher-copy {
+            box-sizing: border-box;
+            position: relative;
+            vertical-align: top;
+        }
+
+        .voucher-copy + .voucher-copy {
+            margin-left: 28px !important;
+        }
+
+        .voucher-copy + .voucher-copy:before {
+            border-left: 1px dashed #777;
+            color: #444;
+            content: "\2702";
+            font-size: 15px;
+            height: calc(100% - 8px);
+            left: -21px;
+            line-height: 16px;
+            padding-left: 2px;
+            position: absolute;
+            top: 4px;
+        }
+
+        @media print {
+            @page {
+                margin: 7mm;
+                size: A4 landscape;
+            }
+
+            .voucher-copy + .voucher-copy:before {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
     </style>
 </head>
 
@@ -113,9 +148,9 @@
     $voucher_footer_notes = trim((string) $voucher_settings['footer_notes']);
     $voucher_footer_lines = ($voucher_footer_notes === '') ? array() : preg_split('/\r\n|\r|\n/', $voucher_footer_notes);
     ?>
-    <div class="datatable">
+    <div class="datatable voucher-layout-<?php echo $voucher_copy_count; ?>">
         <div style="margin-top: 10px;"></div>
-        <div class="dataTable_wrapper" id="tables"
+        <div class="dataTable_wrapper voucher-copy" id="tables"
             style="display:inline-block; width:300px;font-size:12px;margin-left: 1px;">
             <h4 style="width: 290px; margin-left: 2px; min-height: 90px; height: auto; overflow: hidden;">
                 <img style="float: right; margin-top: -9px;"
@@ -316,7 +351,7 @@ $pendingFee+=$value1->fees[$i]->amount;
 -->
         </div>
         <?php if ($voucher_copy_count >= 2): ?>
-        <div class="dataTable_wrapper" id="tables"
+        <div class="dataTable_wrapper voucher-copy" id="tables"
             style="display:inline-block; width:300px;font-size:12px;margin-left: 1px">
             <h4 style="width: 290px; margin-left: 2px; min-height: 90px; height: auto; overflow: hidden;">
                 <img style="float: right; margin-top: -9px;"
@@ -514,7 +549,7 @@ $pendingFee+=$value1->fees[$i]->amount;
         </div>
         <?php endif; ?>
         <?php if ($voucher_copy_count >= 3): ?>
-        <div class="dataTable_wrapper" id="tables"
+        <div class="dataTable_wrapper voucher-copy" id="tables"
             style="display:inline-block; width:300px;font-size:12px;margin-left: 1px;">
             <h4 style="width: 290px; margin-left: 2px; min-height: 90px; height: auto; overflow: hidden;">
                 <img style="float: right; margin-top: -9px;"

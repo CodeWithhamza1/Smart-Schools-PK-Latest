@@ -102,6 +102,107 @@
             vertical-align: top;
             white-space: normal;
         }
+
+        .voucher-copy {
+            box-sizing: border-box;
+            position: relative;
+            vertical-align: top;
+        }
+
+        .voucher-copy + .voucher-copy {
+            margin-left: 28px !important;
+        }
+
+        .voucher-copy + .voucher-copy:before {
+            border-left: 1px dashed #777;
+            color: #444;
+            content: "\2702";
+            font-size: 15px;
+            height: calc(100% - 8px);
+            left: -21px;
+            line-height: 16px;
+            padding-left: 2px;
+            position: absolute;
+            top: 4px;
+        }
+
+        .voucher-page-break {
+            break-before: page;
+            clear: both;
+            height: 0;
+            page-break-before: always;
+            width: 100%;
+        }
+
+        .voucher-student-row.copy-count-2 {
+            margin-bottom: 12px;
+        }
+
+        .voucher-student-row.copy-count-2.row-position-2 {
+            border-top: 1px dashed #777;
+            padding-top: 14px;
+            position: relative;
+        }
+
+        .voucher-student-row.copy-count-2.row-position-2:before {
+            background: #fff;
+            color: #444;
+            content: "\2702";
+            font-size: 15px;
+            left: 4px;
+            line-height: 16px;
+            padding-right: 4px;
+            position: absolute;
+            top: -8px;
+        }
+
+        .voucher-layout-2 .voucher-copy {
+            font-size: 10px !important;
+        }
+
+        .voucher-layout-2 .voucher-school-header {
+            height: auto !important;
+            margin-bottom: 4px;
+            margin-top: 4px;
+            min-height: 68px !important;
+        }
+
+        .voucher-layout-2 .table td {
+            line-height: 1.05;
+            padding: 0;
+        }
+
+        .voucher-layout-2 .branchname h3 {
+            font-size: 14px;
+            margin: 4px 0;
+        }
+
+        .voucher-layout-2 .voucher-note-title {
+            font-size: 13px;
+            margin-bottom: 3px;
+            margin-top: 4px;
+        }
+
+        .voucher-layout-2 .voucher-note-line {
+            font-size: 10px;
+            line-height: 1.1;
+            margin-bottom: 2px;
+            margin-top: 2px;
+        }
+
+        @media print {
+            @page {
+                margin: 7mm;
+                size: A4 landscape;
+            }
+
+            .voucher-copy + .voucher-copy:before,
+            .voucher-student-row.copy-count-2.row-position-2,
+            .voucher-student-row.copy-count-2.row-position-2:before {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
     </style>
 </head>
 
@@ -124,9 +225,13 @@
     $voucher_footer_notes = trim((string) $voucher_settings['footer_notes']);
     $voucher_footer_lines = ($voucher_footer_notes === '') ? array() : preg_split('/\r\n|\r|\n/', $voucher_footer_notes);
     ?>
-    <div class="datatable">
+    <div class="datatable voucher-layout-<?php echo $voucher_copy_count; ?>">
         <div style="margin-top: 10px;"></div>
-        <?php $flag = true; ?>
+        <?php
+        $flag = true;
+        $voucher_students_per_page = ($voucher_copy_count === 1) ? 3 : (($voucher_copy_count === 2) ? 2 : 1);
+        $voucher_rendered_students = 0;
+        ?>
         <?php foreach ($masterData as $value2) { ?>
             <?php
             $crnt_fee = 0;
@@ -161,11 +266,16 @@
             }
             
             if ($hasFeesDue || $student_pending_fee > 0) {
+                if ($voucher_rendered_students > 0 && ($voucher_rendered_students % $voucher_students_per_page) === 0) {
+                    echo '<div class="voucher-page-break"></div>';
+                }
+                $voucher_row_position = ($voucher_rendered_students % $voucher_students_per_page) + 1;
+                $voucher_rendered_students++;
                 ?>
-                <?php if ($voucher_copy_count > 1) { ?><div class="voucher-student-row"><?php } ?>
-                <div class="dataTable_wrapper" id="tables"
+                <?php if ($voucher_copy_count > 1) { ?><div class="voucher-student-row copy-count-<?php echo $voucher_copy_count; ?> row-position-<?php echo $voucher_row_position; ?>"><?php } ?>
+                <div class="dataTable_wrapper voucher-copy" id="tables"
                     style="display:inline-block; width:300px;font-size:12px;margin-left: 1px;">
-                    <h4 style="width: 290px; margin-left: 2px; min-height: 90px; height: auto; overflow: hidden;">
+                    <h4 class="voucher-school-header" style="width: 290px; margin-left: 2px; min-height: 90px; height: auto; overflow: hidden;">
                         <img style="float: right; margin-top: -9px;"
                             src="<?php echo base_url() ?>uploads/school_content/logo/<?php echo $settinglist[0]['image']; ?>"
                             height="70" width="70" alt="">
@@ -363,8 +473,8 @@ $pendingFee+=$value1->fees[$i]->amount;
                         </tbody>
                     </table>
                     <?php if (!empty($voucher_footer_lines)) { ?>
-                        <h3 style="margin-left: 2px" class="borderbottom">Note:</h3>
-                        <?php foreach ($voucher_footer_lines as $voucher_footer_line) { ?><h4 style="margin-left: 2px" class="month"><?php echo html_escape($voucher_footer_line); ?></h4><?php } ?>
+                        <h3 style="margin-left: 2px" class="borderbottom voucher-note-title">Note:</h3>
+                        <?php foreach ($voucher_footer_lines as $voucher_footer_line) { ?><h4 style="margin-left: 2px" class="month voucher-note-line"><?php echo html_escape($voucher_footer_line); ?></h4><?php } ?>
                     <?php } ?>
                     <!--            <center><img alt="testing" style=" height: 50px !important;
                  width: 150px !important;" src="<?php /*echo base_url()*/ ?>barcode.php?text=<?php /* echo $value2['student']["admission_no"]*/ ?>&print=false"/></center>
@@ -372,9 +482,9 @@ $pendingFee+=$value1->fees[$i]->amount;
                 </div>
 
                 <?php if ($voucher_copy_count >= 2): ?>
-                <div class="dataTable_wrapper" id="tables"
+                <div class="dataTable_wrapper voucher-copy" id="tables"
                     style="display:inline-block; width:300px;font-size:12px;margin-left:16px;">
-                    <h4 style="width: 290px; margin-left: 2px; min-height: 90px; height: auto; overflow: hidden;">
+                    <h4 class="voucher-school-header" style="width: 290px; margin-left: 2px; min-height: 90px; height: auto; overflow: hidden;">
                         <img style="float: right; margin-top: -9px;"
                             src="<?php echo base_url() ?>uploads/school_content/logo/<?php echo $settinglist[0]['image']; ?>"
                             height="70" width="70" alt="">
@@ -565,8 +675,8 @@ $pendingFee+=$value1->fees[$i]->amount;
                         </tbody>
                     </table>
                     <?php if (!empty($voucher_footer_lines)) { ?>
-                        <h3 style="margin-left: 2px" class="borderbottom">Note:</h3>
-                        <?php foreach ($voucher_footer_lines as $voucher_footer_line) { ?><h4 style="margin-left: 2px" class="month"><?php echo html_escape($voucher_footer_line); ?></h4><?php } ?>
+                        <h3 style="margin-left: 2px" class="borderbottom voucher-note-title">Note:</h3>
+                        <?php foreach ($voucher_footer_lines as $voucher_footer_line) { ?><h4 style="margin-left: 2px" class="month voucher-note-line"><?php echo html_escape($voucher_footer_line); ?></h4><?php } ?>
                     <?php } ?>
                     <!--            <center><img alt="testing" style=" height: 50px !important;
                  width: 150px !important;" src="<?php /*echo base_url()*/ ?>barcode.php?text=<?php /* echo $value2['student']["admission_no"]*/ ?>&print=false"/></center>
@@ -575,9 +685,9 @@ $pendingFee+=$value1->fees[$i]->amount;
                 <?php endif; ?>
 
                 <?php if ($voucher_copy_count >= 3): ?>
-                <div class="dataTable_wrapper" id="tables"
+                <div class="dataTable_wrapper voucher-copy" id="tables"
                     style="display:inline-block; width:300px;font-size:12px;margin-left:16px;">
-                    <h4 style="width: 290px; margin-left: 2px; min-height: 90px; height: auto; overflow: hidden;">
+                    <h4 class="voucher-school-header" style="width: 290px; margin-left: 2px; min-height: 90px; height: auto; overflow: hidden;">
                         <img style="float: right; margin-top: -9px;"
                             src="<?php echo base_url() ?>uploads/school_content/logo/<?php echo $settinglist[0]['image']; ?>"
                             height="70" width="70" alt="">
@@ -768,8 +878,8 @@ $pendingFee+=$value1->fees[$i]->amount;
                         </tbody>
                     </table>
                     <?php if (!empty($voucher_footer_lines)) { ?>
-                        <h3 style="margin-left: 2px" class="borderbottom">Note:</h3>
-                        <?php foreach ($voucher_footer_lines as $voucher_footer_line) { ?><h4 style="margin-left: 2px" class="month"><?php echo html_escape($voucher_footer_line); ?></h4><?php } ?>
+                        <h3 style="margin-left: 2px" class="borderbottom voucher-note-title">Note:</h3>
+                        <?php foreach ($voucher_footer_lines as $voucher_footer_line) { ?><h4 style="margin-left: 2px" class="month voucher-note-line"><?php echo html_escape($voucher_footer_line); ?></h4><?php } ?>
                     <?php } ?>
                     <!--            <center><img alt="testing" style=" height: 50px !important;
                  width: 150px !important;" src="<?php /*echo base_url()*/ ?>barcode.php?text=<?php /* echo $value2['student']["admission_no"]*/ ?>&print=false"/></center>

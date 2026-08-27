@@ -7,8 +7,13 @@
     .copy-label-row.is-inactive { opacity: .5; }
     .copy-label-row.is-inactive input { background: #f5f5f5; }
     .voucher-preview-sheet { background: #eef2f5; border: 1px solid #d9e1e7; padding: 14px; overflow-x: auto; }
-    .voucher-preview-row { display: flex; gap: 8px; min-width: 430px; }
-    .voucher-preview-copy { flex: 1 1 0; min-width: 0; background: #fff; border: 1px solid #98a6b3; padding: 8px; color: #263238; }
+    .voucher-preview-row { display: grid; gap: 18px 20px; min-width: 430px; }
+    .voucher-preview-row.preview-layout-1, .voucher-preview-row.preview-layout-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .voucher-preview-row.preview-layout-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .voucher-preview-copy { min-width: 0; background: #fff; border: 1px solid #98a6b3; padding: 8px; color: #263238; position: relative; }
+    .voucher-preview-student { color: #687785; font-size: 8px; margin-top: 4px; text-align: center; }
+    .voucher-preview-copy.has-left-cut:before { border-left: 1px dashed #7d8993; color: #44515b; content: "\2702"; font-size: 11px; height: calc(100% + 8px); left: -13px; padding-left: 1px; position: absolute; top: -4px; }
+    .voucher-preview-copy.has-top-cut { border-top-style: dashed; }
     .voucher-preview-school { font-size: 12px; font-weight: 700; text-align: center; overflow-wrap: anywhere; }
     .voucher-preview-address, .voucher-preview-phone { font-size: 9px; text-align: center; overflow-wrap: anywhere; }
     .voucher-preview-header-note { min-height: 12px; font-size: 8px; text-align: center; margin-top: 4px; white-space: pre-line; overflow-wrap: anywhere; }
@@ -113,7 +118,8 @@
         var count = parseInt($('#copy_count').val(), 10) || 1;
         var headerNote = $('#header_note').val() || '';
         var footerNotes = $('#footer_notes').val() || '';
-        var $preview = $('#voucher-preview-row').empty();
+        var $preview = $('#voucher-preview-row').empty().removeClass('preview-layout-1 preview-layout-2 preview-layout-3').addClass('preview-layout-' + count);
+        var studentsPerPage = count === 1 ? 3 : (count === 2 ? 2 : 1);
 
         $('.copy-label-row').each(function () {
             var copyNumber = parseInt($(this).attr('data-copy-number'), 10);
@@ -123,17 +129,23 @@
             $(this).find('.copy-label-input').attr('required', active);
         });
 
-        for (var copyNumber = 1; copyNumber <= count; copyNumber++) {
-            var label = $('#copy_' + copyNumber + '_label').val() || ('Copy ' + copyNumber);
-            var $copy = $('<div>', {'class': 'voucher-preview-copy'});
-            $('<div>', {'class': 'voucher-preview-school', text: schoolName}).appendTo($copy);
-            $('<div>', {'class': 'voucher-preview-address', text: schoolAddress}).appendTo($copy);
-            $('<div>', {'class': 'voucher-preview-phone', text: schoolPhone}).appendTo($copy);
-            $('<div>', {'class': 'voucher-preview-header-note', text: headerNote}).appendTo($copy);
-            $('<div>', {'class': 'voucher-preview-label', text: label}).appendTo($copy);
-            $('<div>', {'class': 'voucher-preview-lines'}).append('<span></span><span></span><span></span><span></span><span></span>').appendTo($copy);
-            $('<div>', {'class': 'voucher-preview-footer', text: footerNotes}).appendTo($copy);
-            $preview.append($copy);
+        for (var studentNumber = 1; studentNumber <= studentsPerPage; studentNumber++) {
+            for (var copyNumber = 1; copyNumber <= count; copyNumber++) {
+                var label = $('#copy_' + copyNumber + '_label').val() || ('Copy ' + copyNumber);
+                var hasLeftCut = (count === 1 && studentNumber > 1) || (count > 1 && copyNumber > 1);
+                var hasTopCut = count === 2 && studentNumber > 1;
+                var copyClasses = 'voucher-preview-copy' + (hasLeftCut ? ' has-left-cut' : '') + (hasTopCut ? ' has-top-cut' : '');
+                var $copy = $('<div>', {'class': copyClasses});
+                $('<div>', {'class': 'voucher-preview-school', text: schoolName}).appendTo($copy);
+                $('<div>', {'class': 'voucher-preview-address', text: schoolAddress}).appendTo($copy);
+                $('<div>', {'class': 'voucher-preview-phone', text: schoolPhone}).appendTo($copy);
+                $('<div>', {'class': 'voucher-preview-header-note', text: headerNote}).appendTo($copy);
+                $('<div>', {'class': 'voucher-preview-label', text: label}).appendTo($copy);
+                $('<div>', {'class': 'voucher-preview-student', text: 'Student ' + studentNumber}).appendTo($copy);
+                $('<div>', {'class': 'voucher-preview-lines'}).append('<span></span><span></span><span></span><span></span><span></span>').appendTo($copy);
+                $('<div>', {'class': 'voucher-preview-footer', text: footerNotes}).appendTo($copy);
+                $preview.append($copy);
+            }
         }
     }
 
