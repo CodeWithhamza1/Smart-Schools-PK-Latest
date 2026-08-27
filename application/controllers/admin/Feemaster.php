@@ -511,8 +511,10 @@ class Feemaster extends Admin_Controller {
     }
 
     function genrateFeeFeeStructure($feetype_value_id,$clnd_month){
-        redirect('admin/feemaster/generateFee');
-        return;
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_add')) {
+            access_denied();
+            return;
+        }
 //        echo $feetype_value_id . " - " . $clnd_month; die();
         $year = date("Y");
         $date_new = $year."-".$clnd_month."-01";
@@ -575,13 +577,11 @@ class Feemaster extends Admin_Controller {
     }
     function feeStructure()
     {
-        redirect('admin/feemaster/generateFee');
-        return;
         if (!$this->rbac->hasPrivilege('fees_group_assign', 'can_view')) {
             access_denied();
         }
-        $this->session->set_userdata('top_menu', 'Fees Structure');
-        $this->session->set_userdata('sub_menu', 'admin/feemaster');
+        $this->session->set_userdata('top_menu', 'Fees Collection');
+        $this->session->set_userdata('sub_menu', 'admin/feemaster/feeStructure');
         $data['title'] = 'Fees Structure';
         $student_result = $this->student_model->get();
 
@@ -605,8 +605,10 @@ class Feemaster extends Admin_Controller {
 
     function addFeeStructure()
     {
-        redirect('admin/feemaster/generateFee');
-        return;
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_add')) {
+            access_denied();
+            return;
+        }
         try {
             // Input validation
             $class_id = $this->input->post('class');

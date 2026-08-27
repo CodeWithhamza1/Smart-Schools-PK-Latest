@@ -152,6 +152,7 @@ class Feeworkspace extends Admin_Controller
         $data['fee_masters'] = $this->feesessiongroup_model->getFeesByGroup();
         $data['discounts'] = $this->feediscount_model->get();
         $data['session_name'] = $this->setting_model->getCurrentSessionName();
+        $data['can_fee_structure'] = $this->rbac->hasPrivilege('fees_group_assign', 'can_view');
         $this->render('setup', $data);
     }
 
@@ -265,7 +266,7 @@ class Feeworkspace extends Admin_Controller
 
     private function canViewSetup()
     {
-        foreach (array('fees_type','fees_group','fees_master','fees_discount','fees_carry_forward') as $p) if ($this->rbac->hasPrivilege($p,'can_view')) return true;
+        foreach (array('fees_type','fees_group','fees_master','fees_discount','fees_carry_forward','fees_group_assign') as $p) if ($this->rbac->hasPrivilege($p,'can_view')) return true;
         return false;
     }
     private function baseData($active,$title) { $this->session->set_userdata('top_menu','Fee Workspace'); $this->session->set_userdata('sub_menu','admin/feeworkspace/'.$active); return array('title'=>$title,'active_section'=>$active); }
