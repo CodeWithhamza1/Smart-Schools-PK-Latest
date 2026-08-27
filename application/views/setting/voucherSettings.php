@@ -20,7 +20,7 @@
     .voucher-preview-label { background: #273444; color: #fff; text-align: center; font-size: 10px; font-weight: 700; margin: 7px -4px; padding: 3px; overflow-wrap: anywhere; }
     .voucher-preview-lines span { display: block; border-bottom: 1px solid #c7cfd6; height: 14px; }
     .voucher-preview-footer { min-height: 25px; font-size: 8px; margin-top: 7px; white-space: pre-line; overflow-wrap: anywhere; }
-    @media (max-width: 991px) {
+    @media (max-width: 1199px) {
         .voucher-settings-grid { display: block; }
         .voucher-preview-panel { position: static; margin-top: 20px; }
     }
@@ -29,13 +29,15 @@
     }
 </style>
 
-<section class="content-header">
-    <h1><i class="fa fa-file-text-o"></i> Voucher Settings</h1>
-</section>
+<!-- Content Wrapper. Contains page content -->
+<div class="content-wrapper">
+    <section class="content-header">
+        <h1><i class="fa fa-file-text-o"></i> Voucher Settings</h1>
+    </section>
 
-<section class="content">
-    <div class="row">
-        <div class="col-md-12">
+    <section class="content">
+        <div class="row">
+            <div class="col-md-12">
             <?php echo $this->session->flashdata('msg'); ?>
             <?php if (!empty($save_error)) { ?>
                 <div class="alert alert-danger"><?php echo html_escape($save_error); ?></div>
@@ -102,9 +104,10 @@
                     </div>
                 </div>
             </div>
+            </div>
         </div>
-    </div>
-</section>
+    </section>
+</div><!-- /.content-wrapper -->
 
 <script>
 (function ($) {
