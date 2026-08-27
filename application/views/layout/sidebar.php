@@ -1389,6 +1389,7 @@ if ($this->module_lib->hasActive('system_settings') || $this->rbac->hasPrivilege
 if ($this->rbac->hasPrivilege('general_setting', 'can_view')) {
             ?>
                                 <li class="<?php echo set_Submenu('schsettings/index'); ?>"><a href="<?php echo base_url(); ?>schsettings"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('general_settings'); ?></a></li>
+                                <li class="<?php echo set_Submenu('vouchersettings/index'); ?>"><a href="<?php echo site_url('admin/voucher-settings'); ?>"><i class="fa fa-angle-double-right"></i> Voucher Settings</a></li>
                                 <?php
 }
         if ($this->rbac->hasPrivilege('session_setting', 'can_view')) {

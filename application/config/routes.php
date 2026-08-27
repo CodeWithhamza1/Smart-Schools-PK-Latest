@@ -26,6 +26,7 @@ $route['api/attendance/health'] = 'api_attendance/health';
 $route['api/attendance/sync'] = 'api_attendance/sync';
 $route['api/attendance/reconcile'] = 'api_attendance/reconcile';
 $route['admin/attendance/student_report'] = 'admin/attendance/student_report';
+$route['admin/voucher-settings'] = 'vouchersettings/index';
 
 //======= front url rewriting==========
 $route['page/(:any)'] = 'welcome/page/$1';

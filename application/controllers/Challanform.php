@@ -9,6 +9,7 @@ class Challanform extends Admin_Controller
         $this->load->model("Student_model");
         $this->load->model("studentfee_model");
         $this->load->model("class_model");
+        $this->load->model("voucher_setting_model");
 
 
 
@@ -88,6 +89,9 @@ class Challanform extends Admin_Controller
             $data['school'] = $this->setting_model->getCurrentSchoolName();
             $setting_result = $this->setting_model->get();
             $data['settinglist'] = $setting_result;
+            $setting_id = isset($setting_result[0]['id']) ? (int) $setting_result[0]['id'] : 1;
+            $voucher_settings = $this->voucher_setting_model->getResolved($setting_id);
+            $data['voucher_settings'] = $voucher_settings;
             if($std != 'ALL'){
                 $student = $this->student_model->get($std);
                 $data['title'] = 'Student Detail';
@@ -264,6 +268,7 @@ class Challanform extends Admin_Controller
                 $data['masterData'] = $masterData;
                 $data['school'] = $this->setting_model->getCurrentSchoolName();
                 $data['settinglist'] = $setting_result;
+                $data['voucher_settings'] = $voucher_settings;
                 for($i=0; $i<count($data['masterData']); $i++){
                     for($j=0; $j<count($data['masterData'][$i]['student_due_fee']); $j++){
                         if($data['masterData'][$i]['student_due_fee'][$j]->fees != '' ||
