@@ -6,7 +6,7 @@ if (!defined('BASEPATH')) {
 class Pushnotification {
     public $CI;
     private $serviceAccountPath;
-    private $projectId = 'unique-school-shama-chap';
+    private $projectId = '';
     private $fcmUrl;
     private $accessToken;
     private $serviceAccount;
@@ -208,10 +208,12 @@ class Pushnotification {
         $fcm_error_code = $this->getFcmErrorCode($response);
 
         if (in_array($status, array('NOT_FOUND', 'UNREGISTERED'), true)
-            || in_array($fcm_error_code, array('SENDER_ID_MISMATCH', 'UNREGISTERED', 'NOT_FOUND', 'INVALID_ARGUMENT'), true)) {
+            || in_array($fcm_error_code, array('SENDER_ID_MISMATCH', 'UNREGISTERED', 'NOT_FOUND'), true)) {
             return true;
         }
 
+        // INVALID_ARGUMENT can also describe a malformed message payload. Only
+        // clear the saved key when Firebase's message identifies the token.
         return stripos($message, 'registration token') !== false
             || stripos($message, 'not a valid FCM registration token') !== false
             || stripos($message, 'Requested entity was not found') !== false
