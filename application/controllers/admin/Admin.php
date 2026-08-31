@@ -338,6 +338,10 @@
             $data['total_receivable_fee'] = isset($fee_calculation['total_receivable_fee']) ? (float) $fee_calculation['total_receivable_fee'] : 0;
             $data['total_remaining_balance'] = max(0, $data['total_receivable_fee'] - (float) $month_collection);
 
+            $data['dashboard_charts'] = $this->getDashboardChartData();
+            $data['today_collection'] = (float) $data['dashboard_charts']['today_collection'];
+            $data['today_profit_loss'] = (float) $data['dashboard_charts']['today_profit_loss'];
+
             if ($data['sch_setting']->attendence_type == 0) {
                 $data['std_graphclass'] = "col-lg-3 col-md-6 col-sm-6";
             } else {
@@ -370,6 +374,11 @@
                 $fee_calculation = $this->calculateCompleteFeeBalance($start_date, $end_date);
                 $data['total_receivable_fee'] = isset($fee_calculation['total_receivable_fee']) ? (float) $fee_calculation['total_receivable_fee'] : 0;
                 $data['total_remaining_balance'] = max(0, $data['total_receivable_fee'] - (float) $data['month_collection']);
+                if (!isset($data['dashboard_charts']) || !is_array($data['dashboard_charts']) || !array_key_exists('today_collection', $data['dashboard_charts']) || !array_key_exists('today_profit_loss', $data['dashboard_charts'])) {
+                    $data['dashboard_charts'] = $this->getDashboardChartData();
+                }
+                $data['today_collection'] = isset($data['dashboard_charts']['today_collection']) ? (float) $data['dashboard_charts']['today_collection'] : 0;
+                $data['today_profit_loss'] = isset($data['dashboard_charts']['today_profit_loss']) ? (float) $data['dashboard_charts']['today_profit_loss'] : 0;
                 $this->load->view('layout/header', $data);
                 $this->load->view('admin/dashboard', $data);
                 $this->load->view('layout/footer', $data);
@@ -688,6 +697,9 @@
             } else {
                 $data['std_graphclass'] = "col-lg-4 col-md-6 col-sm-6";
             }
+            $data['dashboard_charts'] = $this->getDashboardChartData();
+            $data['today_collection'] = (float) $data['dashboard_charts']['today_collection'];
+            $data['today_profit_loss'] = (float) $data['dashboard_charts']['today_profit_loss'];
             $this->setCachedDashboardPayload($dashboard_cache_key, $data);
 
             $this->load->view('layout/header', $data);
@@ -1632,6 +1644,127 @@
             }
 
             return strtotime(date('Y-m-d', $ts));
+        }
+
+        /**
+         * Data for the four dashboard charts. Keep this in the controller so
+         * both dashboard variants receive the same real, session-aware data.
+         */
+        private function getDashboardChartData()
+        {
+            $months = array();
+            $month_keys = array();
+            for ($i = 5; $i >= 0; $i--) {
+                $month_ts = strtotime('-' . $i . ' months', strtotime(date('Y-m-01')));
+                $month_keys[] = date('Y-m-01', $month_ts);
+                $months[] = date('M', $month_ts);
+            }
+
+            $month_start = $month_keys[0];
+            $month_end = date('Y-m-t');
+            $income = array_fill(0, 6, 0);
+            $expenses = array_fill(0, 6, 0);
+            $fees = array_fill(0, 6, 0);
+            $today_collection = 0;
+            $today = date('Y-m-d');
+            $today_income_row = $this->db->select('SUM(amount) AS amount')->from('income')->where('date', $today)->get()->row_array();
+            $today_expense_row = $this->db->select('SUM(amount) AS amount')->from('expenses')->where('date', $today)->get()->row_array();
+            $today_income = !empty($today_income_row['amount']) ? (float) $today_income_row['amount'] : 0;
+            $today_expenses = !empty($today_expense_row['amount']) ? (float) $today_expense_row['amount'] : 0;
+            $month_index = array_flip($month_keys);
+
+            $income_rows = $this->db->select("DATE_FORMAT(date, '%Y-%m-01') AS month_start, SUM(amount) AS amount")
+                ->from('income')->where('date >=', $month_start)->where('date <=', $month_end)
+                ->group_by("DATE_FORMAT(date, '%Y-%m-01')")->get()->result_array();
+            foreach ($income_rows as $row) {
+                if (isset($month_index[$row['month_start']])) {
+                    $income[$month_index[$row['month_start']]] = (float) $row['amount'];
+                }
+            }
+
+            $expense_rows = $this->db->select("DATE_FORMAT(date, '%Y-%m-01') AS month_start, SUM(amount) AS amount")
+                ->from('expenses')->where('date >=', $month_start)->where('date <=', $month_end)
+                ->group_by("DATE_FORMAT(date, '%Y-%m-01')")->get()->result_array();
+            foreach ($expense_rows as $row) {
+                if (isset($month_index[$row['month_start']])) {
+                    $expenses[$month_index[$row['month_start']]] = (float) $row['amount'];
+                }
+            }
+
+            // Payment dates live inside amount_detail; do not sum the fee master amount.
+            $current_session = $this->setting_model->getCurrentSession();
+            $fee_rows = $this->db->select('student_fees_deposite.amount_detail')
+                ->from('student_fees_deposite')
+                ->join('student_fees_master', 'student_fees_master.id = student_fees_deposite.student_fees_master_id')
+                ->join('student_session', 'student_session.id = student_fees_master.student_session_id')
+                ->where('student_session.session_id', $current_session)->get()->result();
+            $range_start = strtotime($month_start);
+            $range_end = strtotime($month_end . ' 23:59:59');
+            foreach ($fee_rows as $row) {
+                $details = json_decode($row->amount_detail);
+                if (!is_object($details)) {
+                    continue;
+                }
+                foreach ($details as $detail) {
+                    $date_value = $this->extractAmountDetailDateValue($detail);
+                    $date_ts = $this->parseDateToDayTimestamp($date_value, $range_start, $range_end);
+                    if ($date_ts === null || $date_ts < $range_start || $date_ts > $range_end) {
+                        continue;
+                    }
+                    $entry_amount = (float) (isset($detail->amount) ? $detail->amount : 0) + (float) (isset($detail->amount_fine) ? $detail->amount_fine : 0);
+                    if (date('Y-m-d', $date_ts) === date('Y-m-d')) {
+                        $today_collection += $entry_amount;
+                    }
+                    $key = date('Y-m-01', $date_ts);
+                    if (isset($month_index[$key])) {
+                        $fees[$month_index[$key]] += $entry_amount;
+                    }
+                }
+            }
+
+            $class_rows = $this->db->select("classes.class AS class_name,
+                    SUM(CASE WHEN student_attendences.attendence_type_id = 1 THEN 1 ELSE 0 END) AS present,
+                    SUM(CASE WHEN student_attendences.attendence_type_id = 3 THEN 1 ELSE 0 END) AS late,
+                    SUM(CASE WHEN student_attendences.attendence_type_id = 4 THEN 1 ELSE 0 END) AS absent")
+                ->from('student_attendences')
+                ->join('student_session', 'student_session.id = student_attendences.student_session_id')
+                ->join('classes', 'classes.id = student_session.class_id')
+                ->where('student_session.session_id', $current_session)->where('student_attendences.date', $today)
+                ->group_by(array('classes.id', 'classes.class'))->order_by('classes.id')->get()->result_array();
+
+            $staff_total = (int) $this->db->where('is_active', 1)->count_all_results('staff');
+            $staff_present_type = 1;
+            $staff_config = $this->config->item('staffattendance');
+            if (is_array($staff_config) && isset($staff_config['present'])) {
+                $staff_present_type = (int) $staff_config['present'];
+            }
+            $staff_start = date('Y-m-d', strtotime('-5 days'));
+            $staff_rows = $this->db->select('date, COUNT(DISTINCT staff_id) AS present_count')
+                ->from('staff_attendance')->where('date >=', $staff_start)->where('date <=', $today)
+                ->where('staff_attendance_type_id', $staff_present_type)->group_by('date')->get()->result_array();
+            $staff_by_date = array();
+            foreach ($staff_rows as $row) {
+                $staff_by_date[$row['date']] = (int) $row['present_count'];
+            }
+            $staff_days = array();
+            $staff_percent = array();
+            for ($i = 5; $i >= 0; $i--) {
+                $date = date('Y-m-d', strtotime('-' . $i . ' days'));
+                $staff_days[] = date('D', strtotime($date));
+                $staff_percent[] = $staff_total > 0 ? round(($staff_by_date[$date] ?? 0) * 100 / $staff_total, 2) : 0;
+            }
+
+            return array(
+                'months' => $months,
+                'income' => $income,
+                'expenses' => $expenses,
+                'fees' => $fees,
+                'today_collection' => $today_collection,
+                'today_profit_loss' => $today_collection + $today_income - $today_expenses,
+                'classes' => $class_rows,
+                'staff_days' => $staff_days,
+                'staff_percent' => $staff_percent,
+            );
         }
 
         private function getDashboardCacheKey($staff_id, $role_id)

@@ -29,6 +29,54 @@ class Studentfee_model extends MY_Model {
         return $query->row();
     }
 
+    /**
+     * Header totals used on pages that do not have the dashboard payload.
+     * Fee payments are read from the canonical amount_detail entries.
+     */
+    public function getTodayCollectionSummary() {
+        $today = $this->current_date;
+        $collection = 0;
+
+        if ($this->db->table_exists('student_fees_deposite')) {
+            $rows = $this->db->select('student_fees_deposite.amount_detail')
+                ->from('student_fees_deposite')
+                ->join('student_fees_master', 'student_fees_master.id = student_fees_deposite.student_fees_master_id')
+                ->join('student_session', 'student_session.id = student_fees_master.student_session_id')
+                ->where('student_session.session_id', $this->current_session)->get()->result();
+
+            foreach ($rows as $row) {
+                $details = json_decode($row->amount_detail);
+                if (!is_object($details)) {
+                    continue;
+                }
+                foreach ($details as $detail) {
+                    $date_value = null;
+                    foreach (array('date', 'payment_date', 'paid_date', 'deposit_date', 'collection_date', 'created_at', 'date_time', 'datetime') as $key) {
+                        if (isset($detail->$key) && $detail->$key !== '') {
+                            $date_value = $detail->$key;
+                            break;
+                        }
+                    }
+                    $date_ts = $date_value !== null ? strtotime((string) $date_value) : false;
+                    if ($date_ts !== false && date('Y-m-d', $date_ts) === $today) {
+                        $collection += (float) (isset($detail->amount) ? $detail->amount : 0);
+                        $collection += (float) (isset($detail->amount_fine) ? $detail->amount_fine : 0);
+                    }
+                }
+            }
+        }
+
+        $income = $this->db->select('SUM(amount) AS amount')->where('date', $today)->get('income')->row();
+        $expense = $this->db->select('SUM(amount) AS amount')->where('date', $today)->get('expenses')->row();
+        $income_amount = !empty($income->amount) ? (float) $income->amount : 0;
+        $expense_amount = !empty($expense->amount) ? (float) $expense->amount : 0;
+
+        return array(
+            'today_collection' => $collection,
+            'today_profit_loss' => $collection + $income_amount - $expense_amount,
+        );
+    }
+
     public function getStudentFees($id = null) {
         $this->db->select('feecategory.category,student_fees.id as `invoiceno`,student_fees.date,student_fees.id,student_fees.amount,student_fees.amount_discount,student_fees.amount_fine,student_fees.created_at,feetype.type')->from('student_fees');
         $this->db->join('student_session', 'student_session.id = student_fees.student_session_id');
