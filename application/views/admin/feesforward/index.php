@@ -6,17 +6,18 @@ $currency_symbol = $this->customlib->getSchoolCurrencyFormat();
     <!-- Content Header (Page header) -->
     <section class="content-header">
         <h1>
-            <i class="fa fa-money"></i> <?php echo $this->lang->line('fees_collection'); ?> </h1>
+            <i class="fa fa-exchange"></i> <?php echo $this->lang->line('fees_carry_forward'); ?> </h1>
+        <div class="fee-page-intro">Review previous-session balances by class and section before carrying them into the current session.</div>
     </section>
     <!-- Main content -->
     <section class="content">
         <div class="row">  
             <form id='feesforward' action="<?php echo site_url('admin/feesforward/index') ?>"  method="post" accept-charset="utf-8">
                 <div class="col-md-12">
-                    <div class="box box-primary">
+                    <div class="box box-primary fee-setup-card">
                         <div class="box-header with-border">
 
-                            <h3 class="box-title"><i class="fa fa-search"></i> <?php echo $this->lang->line('select_criteria'); ?></h3>
+                            <h3 class="box-title"><i class="fa fa-filter"></i> <?php echo $this->lang->line('select_criteria'); ?></h3>
                             <div class="box-tools pull-right">
                             </div>
                         </div>
@@ -35,6 +36,7 @@ $currency_symbol = $this->customlib->getSchoolCurrencyFormat();
                                         <select  id="class_id" name="class_id" class="form-control"  >
                                             <option value=""><?php echo $this->lang->line('select'); ?></option>
                                             <?php
+                                            $count = 0;
                                             foreach ($classlist as $class) {
                                                 ?>
                                                 <option value="<?php echo $class['id'] ?>"<?php if (set_value('class_id') == $class['id']) echo "selected=selected" ?>><?php echo $class['class'] ?></option>
@@ -58,7 +60,7 @@ $currency_symbol = $this->customlib->getSchoolCurrencyFormat();
                             </div>
 
                             <div class="">
-                                <button type="submit" name="action" value ="search" class="btn btn-primary pull-right"><?php echo $this->lang->line('search'); ?></button>
+                                <button type="submit" name="action" value ="search" class="btn btn-primary pull-right"><i class="fa fa-search"></i> <?php echo $this->lang->line('search'); ?></button>
                             </div>
                         </div>  
 
@@ -68,7 +70,7 @@ $currency_symbol = $this->customlib->getSchoolCurrencyFormat();
                             <div class="box-header ptbnull"></div>   
                             <div class="">
                                 <div class="box-header with-border">
-                                    <h3 class="box-title titlefix"><?php echo $this->lang->line('previous_session_balance_fees'); ?></h3>
+                                    <h3 class="box-title titlefix"><i class="fa fa-history"></i> <?php echo $this->lang->line('previous_session_balance_fees'); ?></h3>
                                     <div class="pull-right">
                                         <span class="text text-danger pt6 bolds"><?php echo $this->lang->line('due_date'); ?>:</span> <?php echo set_value('due_date', $due_date_formated); ?>
                                         <input id="due_date" name="due_date" placeholder="" type="hidden" class="form-control date"  value="<?php echo set_value('due_date', $due_date_formated); ?>" readonly /> 
@@ -150,7 +152,7 @@ $currency_symbol = $this->customlib->getSchoolCurrencyFormat();
                                         </div>
                                         <div class="row">
                                             <div class="box-footer">
-                                                <button type="submit" name="action" value="fee_submit" class="btn btn-primary pull-right"><?php echo $this->lang->line('save'); ?></button>
+                                                <button type="submit" name="action" value="fee_submit" class="btn btn-primary pull-right"><i class="fa fa-check"></i> Carry Forward Balances</button>
                                             </div>
                                         </div>
 

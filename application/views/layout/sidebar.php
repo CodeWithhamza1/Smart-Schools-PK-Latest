@@ -190,7 +190,6 @@ if ($this->module_lib->hasActive('fees_collection')) {
                         <ul class="treeview-menu">
                             <?php if ($this->rbac->hasPrivilege('collect_fees', 'can_view')) {?>
                                 <li class="<?php echo set_Submenu('studentfee/index'); ?>"><a href="<?php echo base_url(); ?>studentfee"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('collect_fees'); ?></a></li>
-                                <li class="<?php echo set_Submenu('studentfee/barCodeFeeCollectView'); ?>"><a href="<?php echo base_url(); ?>studentfee/barCodeFeeCollectView"><i class="fa fa-angle-double-right"></i> <?php echo 'Family'.' '.$this->lang->line('collect_fees'); ?></a></li>
                                 <li class="<?php echo set_Submenu('challanform/loadView'); ?>"><a href="<?php echo site_url('challanform/loadView'); ?>"><i class="fa fa-angle-double-right"></i> Generate Challan </a></li>
 
                                 <?php

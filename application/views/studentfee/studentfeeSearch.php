@@ -5,9 +5,11 @@ $currency_symbol = $this->customlib->getSchoolCurrencyFormat();
     <section class="content-header">
         <h1>
             <i class="fa fa-money"></i> <?php echo $this->lang->line('fees_collection'); ?> </h1>
+        <div class="fee-page-intro">Find a student by class or keyword, then continue to the existing collection screen.</div>
     </section>
     <!-- Main content -->
     <section class="content">
+        <?php $collection_tab = 'student'; $this->load->view('studentfee/_collection_tabs', compact('collection_tab')); ?>
         <div class="row">
             <div class="col-md-12">
                 <div class="box box-primary">

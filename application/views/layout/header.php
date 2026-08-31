@@ -28,6 +28,7 @@
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/plugins/bootstrap-wysihtml5/bootstrap3-wysihtml5.min.css">
 
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/dist/css/custom_style.css">
+        <link rel="stylesheet" href="<?php echo base_url(); ?>backend/dist/css/fee-modern.css">
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/datepicker/css/bootstrap-datetimepicker.css">
         <!--file dropify-->
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/dist/css/dropify.min.css">
@@ -65,7 +66,17 @@
      
   <style type="text/css">
         span.flag-icon.flag-icon-us{text-orientation: mixed;}
-        .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: nowrap; gap: 8px; width: 100%; min-width: 0; min-height: 64px; float: none !important; }
+        .main-header, .main-header > .navbar, .main-header .logo { height: 50px; max-height: 50px; }
+        .fixed .content-wrapper, .fixed .right-side { padding-top: 50px; }
+        .fixed .main-sidebar, .fixed .left-side { padding-top: 50px; }
+        .main-header .logo { overflow: hidden; }
+        .main-header .logo .logo-lg, .main-header .logo .logo-mini { height: 50px; align-items: center; justify-content: center; }
+        .main-header .logo .logo-lg { display: flex; }
+        .main-header .logo .logo-lg img { display: block; max-height: 40px; max-width: 188px; width: auto; object-fit: contain; }
+        .main-header .logo .logo-mini img { display: block; max-height: 34px; max-width: 42px; width: auto; object-fit: contain; }
+        .header-school-area, .header-actions-area { height: 50px; }
+        .main-header .sidebar-session { padding: 12px 0; line-height: 26px; }
+        .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: nowrap; gap: 8px; width: 100%; min-width: 0; height: 50px; min-height: 50px; float: none !important; }
         .header-actions .navbar-form { flex: 1 1 290px; min-width: 220px; max-width: 330px; margin: 0; padding: 0; order: 1; float: none; }
         .header-actions .navbar-form .input-group { display: table; width: 100%; margin-top: 0; }
         .header-actions .search-form3 { min-width: 0; width: 100%; height: 38px; }
@@ -82,10 +93,18 @@
         .header-actions .headertopmenu > li > a { padding-left: 10px; padding-right: 10px; }
         @media (min-width: 1200px) { .header-school-area { width: 30%; } .header-actions-area { width: 70%; padding-left: 0; } }
         @media (min-width: 768px) and (max-width: 1499px) { .header-actions { gap: 5px; } .header-actions .navbar-form { min-width: 175px; max-width: 245px; } .today-collection-pill { flex-basis: 132px; width: 132px; padding: 0 8px; } .today-profit-pill { flex-basis: 122px; width: 122px; } .today-collection-label { display: none; } .header-actions .headertopmenu > li > a { padding-left: 8px; padding-right: 8px; } }
-        @media (max-width: 767px) { .header-actions { gap: 4px; min-height: 58px; } .today-collection-pill { flex-basis: 112px; width: 112px; height: 32px; padding: 0 7px; } .today-profit-pill { flex-basis: 105px; width: 105px; } .today-collection-label { display: none; } }
+        @media (max-width: 767px) { .main-header { height: 100px; max-height: 100px; } .main-header .logo, .main-header > .navbar { height: 50px; max-height: 50px; } .fixed .content-wrapper, .fixed .right-side { padding-top: 100px; } .fixed .main-sidebar, .fixed .left-side { padding-top: 100px; } .header-actions { gap: 4px; height: 50px; min-height: 50px; } .today-collection-pill { flex-basis: 112px; width: 112px; height: 32px; padding: 0 7px; } .today-profit-pill { flex-basis: 105px; width: 105px; } .today-collection-label { display: none; } }
   </style>
     </head>
-    <body class="hold-transition skin-blue fixed sidebar-mini">
+    <?php
+    $fee_route_root = strtolower((string) $this->uri->segment(1));
+    $fee_route_controller = strtolower((string) $this->uri->segment(2));
+    $fee_admin_controllers = array('feegroup', 'feetype', 'feesforward', 'feemaster', 'feesupdate', 'feediscount');
+    $is_fee_module = $this->session->userdata('top_menu') === 'Fees Collection'
+        || in_array($fee_route_root, array('studentfee', 'challanform', 'familychallanform'), true)
+        || ($fee_route_root === 'admin' && in_array($fee_route_controller, $fee_admin_controllers, true));
+    ?>
+    <body class="hold-transition skin-blue fixed sidebar-mini<?php echo $is_fee_module ? ' fee-module-modern' : ''; ?>">
 
 
  <?php
