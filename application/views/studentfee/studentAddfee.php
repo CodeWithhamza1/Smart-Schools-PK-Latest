@@ -176,6 +176,7 @@ foreach ($categorylist as $value) {
                                         <th align="left"><?php echo $this->lang->line('fees_group'); ?></th>
                                         <th align="left"><?php echo $this->lang->line('fees_code'); ?></th>
                                         <th align="left" class="text text-left"><?php echo $this->lang->line('due_date'); ?></th>
+                                        <th align="left" class="text text-left">Fee Month</th>
                                         <th align="left" class="text text-left"><?php echo $this->lang->line('status'); ?></th>
                                         <th class="text text-right"><?php echo $this->lang->line('amount') ?> <span><?php echo "(" . $currency_symbol . ")"; ?></span></th>
                                         <th class="text text-left"><?php echo $this->lang->line('payment_id'); ?></th>
@@ -256,6 +257,13 @@ if ($fee_value->due_date == "0000-00-00") {
         }
         ?>
                                                 </td>
+                                                <td align="left" class="text text-left">
+                                                    <?php
+                                                    if (!empty($fee_value->due_date) && $fee_value->due_date !== '0000-00-00' && strtotime($fee_value->due_date) !== false) {
+                                                        echo date('F', strtotime($fee_value->due_date));
+                                                    }
+                                                    ?>
+                                                </td>
                                                 <td align="left" class="text text-left width85">
                                                     <?php
 if ($feetype_balance == 0) {
@@ -332,6 +340,7 @@ if (!empty($fee_value->amount_detail)) {
                                                         <td align="left"></td>
                                                         <td align="left"></td>
                                                         <td align="left"></td>
+                                                        <td align="left"></td>
                                                         <td class="text-right"><img src="<?php echo base_url(); ?>backend/images/table-arrow.png" alt="" /></td>
                                                         <td class="text text-left">
 
@@ -394,6 +403,7 @@ if (!empty($student_discount_fee)) {
                                                 <td align="left">
                                                     <?php echo $discount_value['code']; ?>
                                                 </td>
+                                                <td align="left"></td>
                                                 <td align="left"></td>
                                                 <td align="left" class="text text-left">
                                                     <?php
@@ -470,6 +480,7 @@ if ($discount_value['status'] == "applied") {
 
 
                                     <tr class="box box-solid total-bg">
+                                        <td align="left" ></td>
                                         <td align="left" ></td>
                                         <td align="left" ></td>
                                         <td align="left" ></td>

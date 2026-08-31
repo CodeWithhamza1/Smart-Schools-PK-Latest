@@ -16,34 +16,7 @@ class Feemaster extends Admin_Controller {
      */
     public function generateFee()
     {
-        if (!$this->rbac->hasPrivilege('fees_master', 'can_view')) {
-            access_denied();
-        }
-
-        $this->session->set_userdata('top_menu', 'Fee Workspace');
-        $this->session->set_userdata('sub_menu', 'admin/feemaster/generateFee');
-
-        $settings = $this->setting_model->get();
-        $fee_due_days = !empty($settings) && isset($settings[0]['fee_due_days']) ? (int) $settings[0]['fee_due_days'] : 0;
-        $default_due_date = date('Y-m-d', strtotime('+' . max(0, $fee_due_days) . ' day'));
-        $operation_token = bin2hex(random_bytes(16));
-        $this->session->set_userdata('fee_generation_operation_token', $operation_token);
-
-        $data = array(
-            'title'             => 'Generate Fee',
-            'classlist'         => $this->class_model->get(),
-            'feetypeList'       => $this->feetype_model->get(),
-            'current_session'   => $this->setting_model->getCurrentSession(),
-            'current_session_name' => $this->setting_model->getCurrentSessionName(),
-            'default_year'      => (int) date('Y', strtotime($default_due_date)),
-            'default_month'     => (int) date('n', strtotime($default_due_date)),
-            'default_due_date'  => $default_due_date,
-            'operation_token'   => $operation_token,
-        );
-
-        $this->load->view('layout/header', $data);
-        $this->load->view('admin/feemaster/generate_fee', $data);
-        $this->load->view('layout/footer', $data);
+        redirect('admin/feemaster/feeStructure');
     }
 
     public function loadGenerationStudents()
@@ -73,8 +46,8 @@ class Feemaster extends Admin_Controller {
         }
 
         try {
-            $payload = $this->validatedGenerationPayload(true, true, 'update');
-            $result = $this->fee_generation_model->updateFees(
+            $payload = $this->validatedGenerationPayload(true, true, 'due-date');
+            $result = $this->fee_generation_model->updateDueDates(
                 $payload,
                 $this->customlib->getStaffID(),
                 $payload['request_id']
@@ -180,7 +153,64 @@ class Feemaster extends Admin_Controller {
             ->set_output(json_encode($data));
     }
 
+    private function generationPageData()
+    {
+        $settings = $this->setting_model->get();
+        $fee_due_days = !empty($settings) && isset($settings[0]['fee_due_days']) ? (int) $settings[0]['fee_due_days'] : 0;
+        $default_due_date = date('Y-m-d', strtotime('+' . max(0, $fee_due_days) . ' day'));
+        $operation_token = bin2hex(random_bytes(16));
+        $this->session->set_userdata('fee_generation_operation_token', $operation_token);
+
+        return array(
+            'title'                => 'Generate Fee',
+            'classlist'            => $this->class_model->get(),
+            'feetypeList'          => $this->feetype_model->get(),
+            'current_session'      => $this->setting_model->getCurrentSession(),
+            'current_session_name' => $this->setting_model->getCurrentSessionName(),
+            'default_year'         => (int) date('Y', strtotime($default_due_date)),
+            'default_month'        => (int) date('n', strtotime($default_due_date)),
+            'default_due_date'     => $default_due_date,
+            'operation_token'      => $operation_token,
+        );
+    }
+
+    public function generationRecords()
+    {
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_view')) {
+            access_denied();
+        }
+        $this->session->set_userdata('top_menu', 'Fees Collection');
+        $this->session->set_userdata('sub_menu', 'admin/feemaster/feeStructure');
+        $data = array(
+            'title' => 'Fee Generation Records',
+            'records' => $this->fee_generation_model->getGenerationRecords(500),
+            'records_available' => $this->db->table_exists('fee_generation_runs'),
+        );
+        $this->load->view('layout/header', $data);
+        $this->load->view('admin/feemaster/generation_records', $data);
+        $this->load->view('layout/footer', $data);
+    }
+
     function index() {
+
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_view') && !$this->rbac->hasPrivilege('fees_discount', 'can_view')) {
+            access_denied();
+        }
+        $this->session->set_userdata('top_menu', 'Fees Collection');
+        $this->session->set_userdata('sub_menu', 'admin/feemaster');
+        if ($this->input->server('REQUEST_METHOD') === 'POST') {
+            $this->session->set_flashdata('msg', '<div class="alert alert-warning text-left">Direct fee creation from Change Fee is disabled. Use Generate Fee to prevent duplicate ledger rows.</div>');
+            redirect('admin/feemaster');
+            return;
+        }
+        $data = array(
+            'title' => 'Change Fee',
+            'fee_rows' => $this->fee_generation_model->getChangeFeeRows(),
+        );
+        $this->load->view('layout/header', $data);
+        $this->load->view('admin/feemaster/change_fee', $data);
+        $this->load->view('layout/footer', $data);
+        return;
 
         $this->session->set_userdata('top_menu', 'Fees Collection');
         $this->session->set_userdata('sub_menu', 'admin/feemaster');
@@ -256,14 +286,79 @@ class Feemaster extends Admin_Controller {
         if (!$this->rbac->hasPrivilege('fees_master', 'can_delete')) {
             access_denied();
         }
-        $data['title'] = 'Fees Master List';
-        $this->feegrouptype_model->remove($id);
-        redirect('admin/feemaster/index');
+        if ($this->input->server('REQUEST_METHOD') !== 'POST') {
+            show_404();
+        }
+        $row = $this->db->select('fgft.id, fgft.fee_session_group_id')
+            ->from('fee_groups_feetype fgft')
+            ->join('fee_session_groups fsg', 'fsg.id = fgft.fee_session_group_id')
+            ->where('fgft.id', (int) $id)
+            ->where('fsg.session_id', (int) $this->setting_model->getCurrentSession())
+            ->get()->row_array();
+        if (!$row) {
+            $this->session->set_flashdata('msg', '<div class="alert alert-danger text-left">Fee record was not found in the current session.</div>');
+            redirect('admin/feemaster');
+            return;
+        }
+        $payment_count = $this->db->where('fee_groups_feetype_id', (int) $id)->count_all_results('student_fees_deposite');
+        if ($payment_count > 0) {
+            $this->session->set_flashdata('msg', '<div class="alert alert-danger text-left">This fee has a payment or discount record and cannot be deleted.</div>');
+            redirect('admin/feemaster');
+            return;
+        }
+        $this->db->trans_begin();
+        $this->db->where('id', (int) $id)->delete('fee_groups_feetype');
+        $remaining = $this->db->where('fee_session_group_id', (int) $row['fee_session_group_id'])->count_all_results('fee_groups_feetype');
+        if ($remaining === 0) {
+            $master_ids = array_column($this->db->select('id')->where('fee_session_group_id', (int) $row['fee_session_group_id'])->get('student_fees_master')->result_array(), 'id');
+            $orphan_payments = empty($master_ids) ? 0 : $this->db->where_in('student_fees_master_id', $master_ids)->count_all_results('student_fees_deposite');
+            if ($orphan_payments === 0) {
+                $this->db->where('fee_session_group_id', (int) $row['fee_session_group_id'])->delete('student_fees_master');
+                $this->db->where('id', (int) $row['fee_session_group_id'])->delete('fee_session_groups');
+            }
+        }
+        if ($this->db->trans_status() === false) {
+            $this->db->trans_rollback();
+            $this->session->set_flashdata('msg', '<div class="alert alert-danger text-left">The fee could not be deleted. No changes were saved.</div>');
+        } else {
+            $this->db->trans_commit();
+            $this->session->set_flashdata('msg', '<div class="alert alert-success text-left">The unpaid fee record was deleted.</div>');
+        }
+        redirect('admin/feemaster');
+    }
+
+    public function changeDueDate($id)
+    {
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_edit')) {
+            access_denied();
+        }
+        if ($this->input->server('REQUEST_METHOD') !== 'POST') {
+            show_404();
+        }
+        $due_date = trim((string) $this->input->post('due_date'));
+        $date = DateTime::createFromFormat('Y-m-d', $due_date);
+        if (!$date || $date->format('Y-m-d') !== $due_date) {
+            $this->session->set_flashdata('msg', '<div class="alert alert-danger text-left">Select a valid due date.</div>');
+            redirect('admin/feemaster');
+            return;
+        }
+        $row = $this->db->select('fgft.id')->from('fee_groups_feetype fgft')
+            ->join('fee_session_groups fsg', 'fsg.id = fgft.fee_session_group_id')
+            ->where('fgft.id', (int) $id)->where('fsg.session_id', (int) $this->setting_model->getCurrentSession())
+            ->get()->row_array();
+        $payment_count = $row ? $this->db->where('fee_groups_feetype_id', (int) $id)->count_all_results('student_fees_deposite') : 0;
+        if (!$row || $payment_count > 0) {
+            $this->session->set_flashdata('msg', '<div class="alert alert-danger text-left">Protected or missing fee records cannot be changed.</div>');
+            redirect('admin/feemaster');
+            return;
+        }
+        $this->db->where('id', (int) $id)->update('fee_groups_feetype', array('due_date' => $due_date));
+        $this->session->set_flashdata('msg', '<div class="alert alert-success text-left">Due date updated. Fee type and amount remain unchanged.</div>');
+        redirect('admin/feemaster');
     }
 
     function deletegrp($id) {
-        $data['title'] = 'Fees Master List';
-        $this->feesessiongroup_model->remove($id);
+        $this->session->set_flashdata('msg', '<div class="alert alert-warning text-left">Whole-group deletion is disabled. Delete only the required unpaid fee row.</div>');
         redirect('admin/feemaster');
     }
 
@@ -271,6 +366,9 @@ class Feemaster extends Admin_Controller {
         if (!$this->rbac->hasPrivilege('fees_master', 'can_edit')) {
             access_denied();
         }
+        $this->session->set_flashdata('msg', '<div class="alert alert-info text-left">Generated fee amounts and types are locked. Use the due-date control on Change Fee.</div>');
+        redirect('admin/feemaster');
+        return;
         $this->session->set_userdata('top_menu', 'Fees Collection');
         $this->session->set_userdata('sub_menu', 'admin/feemaster');
         $data['id'] = $id;
@@ -364,6 +462,9 @@ class Feemaster extends Admin_Controller {
     }
 
     function addYearly() {
+        $this->session->set_flashdata('msg', '<div class="alert alert-info text-left">Fee Master (Year) has been retired. Please use Generate Fee.</div>');
+        redirect('admin/feemaster/feeStructure');
+        return;
         redirect('admin/feemaster/generateFee');
         return;
         // if(!$this->rbac->hasPrivilege('fees_master','can_add')){
@@ -510,7 +611,7 @@ class Feemaster extends Admin_Controller {
 
     }
 
-    function genrateFeeFeeStructure($feetype_value_id,$clnd_month){
+    private function genrateFeeFeeStructure($feetype_value_id,$clnd_month){
         if (!$this->rbac->hasPrivilege('fees_master', 'can_add')) {
             access_denied();
             return;
@@ -577,30 +678,15 @@ class Feemaster extends Admin_Controller {
     }
     function feeStructure()
     {
-        if (!$this->rbac->hasPrivilege('fees_group_assign', 'can_view')) {
+        if (!$this->rbac->hasPrivilege('fees_master', 'can_view')) {
             access_denied();
         }
         $this->session->set_userdata('top_menu', 'Fees Collection');
         $this->session->set_userdata('sub_menu', 'admin/feemaster/feeStructure');
-        $data['title'] = 'Fees Structure';
-        $student_result = $this->student_model->get();
-
-        $class = $this->student_model->getClasses();
-        $data['class']=$class;
-        $data['studentlist']=$student_result;
-        $feegroup = $this->feegroup_model->get();
-        $data['feegroupList'] = $feegroup;
-        $feetype = $this->feetype_model->get();
-        $data['feetypeList'] = $feetype;
-        $feegroup_result = $this->feesessiongroup_model->getFeesByGroup();
-        $calenderMonth = $this->feesessiongroup_model->getCalenderMonths();
-//        print_r($calenderMonth); die();
-        $data['calenderMonth'] = $calenderMonth;
-        $data['feemasterList'] = $feegroup_result;
+        $data = $this->generationPageData();
         $this->load->view('layout/header', $data);
-        $this->load->view('admin/feemaster/feestructure', $data);
+        $this->load->view('admin/feemaster/generate_fee_legacy', $data);
         $this->load->view('layout/footer', $data);
-        //print_r($class);
     }
 
     function addFeeStructure()
@@ -609,6 +695,9 @@ class Feemaster extends Admin_Controller {
             access_denied();
             return;
         }
+        $this->session->set_flashdata('msg', '<div class="alert alert-info text-left">The previous Fee Structure writer has been retired. Reload Generate Fee and submit through the new protected form.</div>');
+        redirect('admin/feemaster/feeStructure');
+        return;
         try {
             // Input validation
             $class_id = $this->input->post('class');

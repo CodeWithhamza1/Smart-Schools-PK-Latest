@@ -34,6 +34,11 @@ $month_list = array(
     </section>
     <!-- Main content -->
     <section class="content">
+        <style>.challan-tabs{display:flex;gap:6px;margin-bottom:15px;border-bottom:1px solid #dfe4ea}.challan-tabs a{padding:10px 16px;border-radius:5px 5px 0 0;color:#52606d;font-weight:600}.challan-tabs a.active{background:#3c8dbc;color:#fff}</style>
+        <div class="challan-tabs">
+            <a class="active" href="<?php echo site_url('challanform/loadView'); ?>"><i class="fa fa-user"></i> Student Challan</a>
+            <a href="<?php echo site_url('FamilyChallanform/loadView'); ?>"><i class="fa fa-users"></i> Family Challan</a>
+        </div>
         <div class="row">
             <div class="col-md-12">
                 <div class="box box-primary">

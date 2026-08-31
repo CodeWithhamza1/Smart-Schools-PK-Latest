@@ -171,12 +171,9 @@ if ($this->rbac->hasPrivilege('student_houses', 'can_view')) {
 }
 }
 
-// Keep the original Fees Collection navigation available alongside the
-// consolidated Fee Workspace so existing workflows remain directly accessible.
+// Original Fees Collection navigation is the canonical fee workflow.
 if ($this->module_lib->hasActive('fees_collection')) {
     if (($this->rbac->hasPrivilege('collect_fees', 'can_view') ||
-        $this->rbac->hasPrivilege('search_fees_payment', 'can_view') ||
-        $this->rbac->hasPrivilege('search_due_fees', 'can_view') ||
         $this->rbac->hasPrivilege('fees_statement', 'can_view') ||
         $this->rbac->hasPrivilege('fees_carry_forward', 'can_view') ||
         $this->rbac->hasPrivilege('fees_group_assign', 'can_view') ||
@@ -194,33 +191,17 @@ if ($this->module_lib->hasActive('fees_collection')) {
                             <?php if ($this->rbac->hasPrivilege('collect_fees', 'can_view')) {?>
                                 <li class="<?php echo set_Submenu('studentfee/index'); ?>"><a href="<?php echo base_url(); ?>studentfee"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('collect_fees'); ?></a></li>
                                 <li class="<?php echo set_Submenu('studentfee/barCodeFeeCollectView'); ?>"><a href="<?php echo base_url(); ?>studentfee/barCodeFeeCollectView"><i class="fa fa-angle-double-right"></i> <?php echo 'Family'.' '.$this->lang->line('collect_fees'); ?></a></li>
-                                <li class="<?php echo set_Submenu('challanform/loadView'); ?>"><a href="<?php echo base_url(); ?>challanform/loadView"><i class="fa fa-angle-double-right"></i> Generate Challan </a></li>
-                                <li class="<?php echo set_Submenu('FamilyChallanform/loadView'); ?>"><a href="<?php echo base_url(); ?>FamilyChallanform/loadView"><i class="fa fa-angle-double-right"></i> Generate Family Challan </a></li>
+                                <li class="<?php echo set_Submenu('challanform/loadView'); ?>"><a href="<?php echo site_url('challanform/loadView'); ?>"><i class="fa fa-angle-double-right"></i> Generate Challan </a></li>
 
                                 <?php
 }
-        if ($this->rbac->hasPrivilege('search_fees_payment', 'can_view')) {
+        if ($this->rbac->hasPrivilege('fees_master', 'can_view') || $this->rbac->hasPrivilege('fees_discount', 'can_view')) {
             ?>
-                                <li class="<?php echo set_Submenu('studentfee/searchpayment'); ?>"><a href="<?php echo base_url(); ?>studentfee/searchpayment"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('search_fees_payment'); ?></a></li>
-                                <?php
-}
-        if ($this->rbac->hasPrivilege('search_due_fees', 'can_view')) {
-            ?>
-                                <li class="<?php echo set_Submenu('studentfee/feesearch'); ?>"><a href="<?php echo base_url(); ?>studentfee/feesearch"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('search_due_fees'); ?> </a></li>
-                                <?php
-}
-
-        if ($this->rbac->hasPrivilege('fees_master', 'can_view')) {
-            ?>
-                                <li class="<?php echo set_Submenu('admin/feemaster'); ?>"><a href="<?php echo base_url(); ?>admin/feemaster"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('fees_master'); ?></a></li>
-                                <li class="<?php echo set_Submenu('admin/feemaster/generateFee'); ?>"><a href="<?php echo base_url(); ?>admin/feemaster/generateFee"><i class="fa fa-angle-double-right"></i> Generate Fee</a></li>
+                                <li class="<?php echo set_Submenu('admin/feemaster'); ?>"><a href="<?php echo base_url(); ?>admin/feemaster"><i class="fa fa-angle-double-right"></i> Change Fee</a></li>
+                                <?php if ($this->rbac->hasPrivilege('fees_master', 'can_view')) { ?>
+                                <li class="<?php echo set_Submenu('admin/feemaster/feeStructure'); ?>"><a href="<?php echo base_url(); ?>admin/feemaster/feeStructure"><i class="fa fa-angle-double-right"></i> Generate Fee</a></li>
                                 <li class="<?php echo set_Submenu('feesupdate/index'); ?>"><a href="<?php echo base_url('admin/feesupdate'); ?>"><i class="fa fa-angle-double-right"></i> Fees Update</a></li>
-                                <?php
-}
-
-        if ($this->rbac->hasPrivilege('fees_group_assign', 'can_view')) {
-            ?>
-                                <li class="<?php echo set_Submenu('admin/feemaster/feeStructure'); ?>"><a href="<?php echo base_url(); ?>admin/feemaster/feeStructure"><i class="fa fa-angle-double-right"></i> Fee Structure</a></li>
+                                <?php } ?>
                                 <?php
 }
 
@@ -233,11 +214,6 @@ if ($this->module_lib->hasActive('fees_collection')) {
         if ($this->rbac->hasPrivilege('fees_type', 'can_view')) {
             ?>
                                 <li class="<?php echo set_Submenu('feetype/index'); ?>"><a href="<?php echo base_url(); ?>admin/feetype"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('fees_type'); ?></a></li>
-                                <?php
-}
-        if ($this->rbac->hasPrivilege('fees_discount', 'can_view')) {
-            ?>
-                                <li class="<?php echo set_Submenu('admin/feediscount'); ?>"><a href="<?php echo base_url(); ?>admin/feediscount"><i class="fa fa-angle-double-right"></i> <?php echo $this->lang->line('fees_discount'); ?></a></li>
                                 <?php
 }
         if ($this->rbac->hasPrivilege('fees_carry_forward', 'can_view')) {
@@ -267,64 +243,6 @@ if ($this->module_lib->hasActive('fees_collection')) {
 }
 }
 
-// Consolidated Fee Workspace navigation.
-if ($this->module_lib->hasActive('fees_collection')) {
-    $fee_workspace_collect = $this->rbac->hasPrivilege('collect_fees', 'can_view');
-    $fee_workspace_generate = $this->rbac->hasPrivilege('fees_master', 'can_view');
-    $fee_workspace_enquiry = (
-        $this->rbac->hasPrivilege('search_fees_payment', 'can_view') ||
-        $this->rbac->hasPrivilege('search_due_fees', 'can_view') ||
-        $this->rbac->hasPrivilege('fees_reminder', 'can_view') ||
-        $this->rbac->hasPrivilege('fees_statement', 'can_view')
-    );
-    $fee_workspace_setup = (
-        $this->rbac->hasPrivilege('fees_master', 'can_view') ||
-        $this->rbac->hasPrivilege('fees_group', 'can_view') ||
-        $this->rbac->hasPrivilege('fees_type', 'can_view') ||
-        $this->rbac->hasPrivilege('fees_discount', 'can_view') ||
-        $this->rbac->hasPrivilege('fees_group_assign', 'can_view') ||
-        $this->rbac->hasPrivilege('fees_carry_forward', 'can_view')
-    );
-
-    if ($fee_workspace_collect || $fee_workspace_generate || $fee_workspace_enquiry || $fee_workspace_setup) {
-        ?>
-        <li class="treeview <?php echo set_Topmenu('Fee Workspace'); ?>">
-            <a href="#">
-                <i class="fa fa-th-large ftlayer"></i>
-                <span>Fee Workspace</span>
-                <i class="fa fa-angle-left pull-right"></i>
-            </a>
-            <ul class="treeview-menu">
-                <?php if ($fee_workspace_collect) { ?>
-                    <li class="<?php echo set_Submenu('admin/feeworkspace/collect'); ?>">
-                        <a href="<?php echo site_url('admin/feeworkspace/collect'); ?>"><i class="fa fa-angle-double-right"></i> Collect Fees</a>
-                    </li>
-                <?php } ?>
-                <?php if ($fee_workspace_generate) { ?>
-                    <li class="<?php echo set_Submenu('admin/feemaster/generateFee'); ?>">
-                        <a href="<?php echo site_url('admin/feemaster/generateFee'); ?>"><i class="fa fa-angle-double-right"></i> Generate Fee</a>
-                    </li>
-                <?php } ?>
-                <?php if ($fee_workspace_collect) { ?>
-                    <li class="<?php echo set_Submenu('admin/feeworkspace/challans'); ?>">
-                        <a href="<?php echo site_url('admin/feeworkspace/challans'); ?>"><i class="fa fa-angle-double-right"></i> Challans</a>
-                    </li>
-                <?php } ?>
-                <?php if ($fee_workspace_enquiry) { ?>
-                    <li class="<?php echo set_Submenu('admin/feeworkspace/enquiry'); ?>">
-                        <a href="<?php echo site_url('admin/feeworkspace/enquiry'); ?>"><i class="fa fa-angle-double-right"></i> Enquiry &amp; Reports</a>
-                    </li>
-                <?php } ?>
-                <?php if ($fee_workspace_setup) { ?>
-                    <li class="<?php echo set_Submenu('admin/feeworkspace/setup'); ?>">
-                        <a href="<?php echo site_url('admin/feeworkspace/setup'); ?>"><i class="fa fa-angle-double-right"></i> Fee Setup</a>
-                    </li>
-                <?php } ?>
-            </ul>
-        </li>
-        <?php
-    }
-}
 if ($this->module_lib->hasActive('income')) {
     if (($this->rbac->hasPrivilege('income', 'can_view') ||
         $this->rbac->hasPrivilege('search_income', 'can_view') ||

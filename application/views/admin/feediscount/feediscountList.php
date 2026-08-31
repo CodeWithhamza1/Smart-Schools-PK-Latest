@@ -9,6 +9,12 @@
 
     <!-- Main content -->
     <section class="content">
+        <div class="nav-tabs-custom">
+            <ul class="nav nav-tabs">
+                <li><a href="<?php echo site_url('admin/feemaster'); ?>">Student Fees</a></li>
+                <li class="active"><a href="#discounts">Fees Discount</a></li>
+            </ul>
+        </div>
         <div class="row">
             <?php
             if ($this->rbac->hasPrivilege('fees_discount', 'can_add')) {
