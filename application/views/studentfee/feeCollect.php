@@ -5,16 +5,18 @@
     <section class="content-header">
         <h1>
             <i class="fa fa-calendar-check-o"></i> Fee Collection</h1>
+        <div class="fee-page-intro">Enter one admission number to open the complete sibling/family fee collection flow.</div>
     </section>
 
     <!-- Main content -->
     <section class="content">
+        <?php $collection_tab = 'family'; $this->load->view('studentfee/_collection_tabs', compact('collection_tab')); ?>
         <div class="row">
             <div class="col-md-12">
                 <!-- Horizontal Form -->
-                <div class="box box-primary">
+                <div class="box box-primary fee-setup-card">
                     <div class="box-header with-border">
-                        <h3 class="box-title">Fee Collection</h3>
+                        <h3 class="box-title"><i class="fa fa-barcode"></i> Family Admission Lookup</h3>
                     </div><!-- /.box-header -->
 
                     <div class="box-body">

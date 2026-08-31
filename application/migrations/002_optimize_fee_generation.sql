@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS `fee_generation_runs` (
   `fee_year` SMALLINT NOT NULL,
   `fee_month` TINYINT NOT NULL,
   `payload_hash` CHAR(64) NOT NULL,
+  `payload_json` LONGTEXT NULL,
   `status` VARCHAR(20) NOT NULL,
   `result_json` LONGTEXT NULL,
   `error_summary` TEXT NULL,
@@ -73,4 +74,3 @@ SET @fee_idx_sql = IF(
   'SELECT 1'
 );
 PREPARE fee_idx_stmt FROM @fee_idx_sql; EXECUTE fee_idx_stmt; DEALLOCATE PREPARE fee_idx_stmt;
-

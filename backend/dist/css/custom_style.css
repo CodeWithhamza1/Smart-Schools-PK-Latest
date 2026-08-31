@@ -8,9 +8,9 @@
     text-overflow: ellipsis;
 }
 
-/* Minimal logo fix only: keep active theme styles untouched */
+/* Keep uploaded logos inside the fixed 50px header so they cannot cover session links. */
 .main-header .logo {
-    overflow: visible;
+    overflow: hidden;
 }
 
 .main-header .logo .logo-lg img,

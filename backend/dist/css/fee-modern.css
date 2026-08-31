@@ -1,0 +1,193 @@
+.fee-module-modern .content-wrapper {
+    background: #f4f7fb;
+}
+
+.fee-module-modern .content-header {
+    padding: 22px 22px 8px;
+}
+
+.fee-module-modern .content-header h1 {
+    color: #17253b;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.fee-module-modern .content-header h1 > i {
+    color: #3c7be8;
+    margin-right: 7px;
+}
+
+.fee-module-modern .content {
+    padding: 14px 22px 24px;
+}
+
+.fee-module-modern .box,
+.fee-module-modern .nav-tabs-custom {
+    border: 0;
+    border-radius: 12px;
+    box-shadow: 0 5px 18px rgba(23, 37, 59, .08);
+    overflow: hidden;
+}
+
+.fee-module-modern .box.box-primary,
+.fee-module-modern .box.box-info {
+    border-top: 0;
+}
+
+.fee-module-modern .box-header {
+    min-height: 52px;
+    padding: 15px 18px;
+    border-bottom: 1px solid #edf0f5;
+}
+
+.fee-module-modern .box-header .box-title {
+    color: #1d2d44;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.fee-module-modern .box-body {
+    padding: 18px;
+}
+
+.fee-module-modern .box-footer {
+    padding: 13px 18px;
+    border-top: 1px solid #edf0f5;
+    background: #fbfcfe;
+}
+
+.fee-module-modern .form-control {
+    height: 40px;
+    border-color: #dce3ed;
+    border-radius: 7px;
+    box-shadow: none;
+}
+
+.fee-module-modern textarea.form-control {
+    height: auto;
+}
+
+.fee-module-modern .form-control:focus {
+    border-color: #77a7f5;
+    box-shadow: 0 0 0 3px rgba(60, 123, 232, .1);
+}
+
+.fee-module-modern label {
+    color: #3c4b60;
+    font-weight: 600;
+}
+
+.fee-module-modern .btn {
+    border: 0;
+    border-radius: 7px;
+    font-weight: 600;
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.fee-module-modern .btn:hover {
+    transform: translateY(-1px);
+}
+
+.fee-module-modern .btn-primary,
+.fee-module-modern .btn-info {
+    background: linear-gradient(135deg, #3c7be8, #5b8ff1);
+    box-shadow: 0 4px 10px rgba(60, 123, 232, .2);
+    color: #fff;
+}
+
+.fee-module-modern .btn-danger {
+    background: #e35d6a;
+    color: #fff;
+}
+
+.fee-module-modern .btn-default {
+    border: 1px solid #dce3ed;
+    background: #fff;
+    color: #40516a;
+}
+
+.fee-module-modern .table {
+    margin-bottom: 0;
+}
+
+.fee-module-modern .table > thead > tr > th {
+    padding: 12px 10px;
+    border-bottom: 1px solid #dce3ed;
+    background: #f6f8fc;
+    color: #526177;
+    font-size: 12px;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.fee-module-modern .table > tbody > tr > td {
+    padding: 12px 10px;
+    border-color: #edf0f5;
+    vertical-align: middle;
+}
+
+.fee-module-modern .table-hover > tbody > tr:hover {
+    background: #f7faff;
+}
+
+.fee-workflow-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 16px;
+    padding: 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(23, 37, 59, .05);
+}
+
+.fee-workflow-tabs a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 15px;
+    border-radius: 8px;
+    color: #526177;
+    font-weight: 600;
+}
+
+.fee-workflow-tabs a.active {
+    background: #eaf2ff;
+    color: #2467cf;
+}
+
+.fee-page-intro {
+    margin-top: 4px;
+    color: #748196;
+    font-size: 13px;
+}
+
+.fee-setup-card .box-header i,
+.fee-list-card .box-header i {
+    width: 28px;
+    height: 28px;
+    margin-right: 7px;
+    border-radius: 7px;
+    background: #eaf2ff;
+    color: #3474dc;
+    line-height: 28px;
+    text-align: center;
+}
+
+.fee-action-buttons {
+    display: inline-flex;
+    gap: 5px;
+    justify-content: flex-end;
+}
+
+.fee-action-buttons .btn {
+    width: 30px;
+    height: 30px;
+    padding: 6px;
+}
+
+@media (max-width: 767px) {
+    .fee-module-modern .content-header { padding: 16px 15px 6px; }
+    .fee-module-modern .content { padding: 10px 15px 20px; }
+    .fee-workflow-tabs { overflow-x: auto; white-space: nowrap; }
+}

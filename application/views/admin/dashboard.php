@@ -674,6 +674,17 @@
     .quick-exam-dashboard-widget .table { margin-bottom: 0; color: #fff; }
     .quick-exam-dashboard-widget .table > thead > tr > th, .quick-exam-dashboard-widget .table > tbody > tr > td { border-color: rgba(255,255,255,.14); }
     .quick-exam-dashboard-widget .quick-exam-empty { padding: 8px 0 0; opacity: .85; }
+
+    .dashboard-charts-row { margin: 0 -10px 10px; }
+    .dashboard-chart-card { margin: 0 10px 20px; min-height: 360px; }
+    .dashboard-chart-card .box-header { padding: 18px 20px 10px; border-bottom: 0; }
+    .dashboard-chart-card .box-title { font-size: 20px; font-weight: 600; }
+    .dashboard-chart-card .box-body { padding: 0 18px 18px; }
+    .dashboard-chart-canvas { height: 270px !important; width: 100% !important; }
+    .dashboard-chart-legend { display: flex; gap: 14px; flex-wrap: wrap; color: #555; font-size: 13px; padding: 0 0 8px; }
+    .dashboard-chart-legend span { white-space: nowrap; }
+    .dashboard-chart-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    @media (max-width: 767px) { .dashboard-chart-card { min-height: 330px; } .dashboard-chart-canvas { height: 230px !important; } }
 </style>
 
 <div class="content-wrapper" style="min-height: 946px;">
@@ -961,6 +972,52 @@
             </div>
             <div class="col-md-12">
                 <div class="row">
+                    <?php
+                    $dashboard_chart_data = (isset($dashboard_charts) && is_array($dashboard_charts)) ? $dashboard_charts : array();
+                    $chart_months = isset($dashboard_chart_data['months']) ? $dashboard_chart_data['months'] : array();
+                    $chart_income = isset($dashboard_chart_data['income']) ? $dashboard_chart_data['income'] : array();
+                    $chart_expenses = isset($dashboard_chart_data['expenses']) ? $dashboard_chart_data['expenses'] : array();
+                    $chart_fees = isset($dashboard_chart_data['fees']) ? $dashboard_chart_data['fees'] : array();
+                    $chart_classes = isset($dashboard_chart_data['classes']) ? $dashboard_chart_data['classes'] : array();
+                    $chart_staff_days = isset($dashboard_chart_data['staff_days']) ? $dashboard_chart_data['staff_days'] : array();
+                    $chart_staff_percent = isset($dashboard_chart_data['staff_percent']) ? $dashboard_chart_data['staff_percent'] : array();
+                    ?>
+                    <div class="col-md-6">
+                        <div class="box dashboard-chart-card">
+                            <div class="box-header"><h3 class="box-title">Monthly Comparison</h3></div>
+                            <div class="box-body">
+                                <div class="dashboard-chart-legend"><span><i style="background:#7569d9"></i>Income</span><span><i style="background:#df5a2f"></i>Expense</span><span><i style="background:#1b9d75"></i>Fees</span></div>
+                                <canvas id="dashboardMonthlyComparison" class="dashboard-chart-canvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="box dashboard-chart-card">
+                            <div class="box-header"><h3 class="box-title">Fees Collection &amp; Expenses</h3></div>
+                            <div class="box-body">
+                                <div class="dashboard-chart-legend"><span><i style="background:#1b9d75"></i>Fees Collected</span><span><i style="background:#d94f7a"></i>Expenses</span></div>
+                                <canvas id="dashboardFeesExpenses" class="dashboard-chart-canvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="box dashboard-chart-card">
+                            <div class="box-header"><h3 class="box-title">Student Attendance by Class</h3></div>
+                            <div class="box-body">
+                                <div class="dashboard-chart-legend"><span><i style="background:#609b1b"></i>Present</span><span><i style="background:#bd7912"></i>Late</span><span><i style="background:#e64b4b"></i>Absent</span></div>
+                                <canvas id="dashboardStudentAttendance" class="dashboard-chart-canvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="box dashboard-chart-card">
+                            <div class="box-header"><h3 class="box-title">Teacher Attendance</h3></div>
+                            <div class="box-body">
+                                <div class="dashboard-chart-legend"><span><i style="background:#5748b8"></i>Present %</span></div>
+                                <canvas id="dashboardTeacherAttendance" class="dashboard-chart-canvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
                     <!-- Quick Links - Full Width Modern Design -->
                     <div class="col-md-12 quicklinks-container">
                         <div class="quicklinks-box">
@@ -1537,6 +1594,51 @@ if ($ai_widget_debug) {
 }
 if ($ai_allowed && $ai_widget_exists) { $this->load->view('partials/ai_widget'); }
 ?>
+
+<script>
+    $(function () {
+        var chartMonths = <?php echo json_encode($chart_months); ?>;
+        var chartIncome = <?php echo json_encode($chart_income); ?>;
+        var chartExpenses = <?php echo json_encode($chart_expenses); ?>;
+        var chartFees = <?php echo json_encode($chart_fees); ?>;
+        var classRows = <?php echo json_encode($chart_classes); ?>;
+        var staffDays = <?php echo json_encode($chart_staff_days); ?>;
+        var staffPercent = <?php echo json_encode($chart_staff_percent); ?>;
+        function renderDashboardCharts() {
+            if (typeof Chart === 'undefined' || !/^4\./.test(Chart.version || '')) { return; }
+            Chart.defaults.font.family = "'Segoe UI', Tahoma, sans-serif";
+            Chart.defaults.color = '#6b7280';
+            var grid = { color: 'rgba(100,116,139,.14)', drawBorder: false };
+            var money = function (value) { return Number(value || 0).toLocaleString(); };
+            var tooltip = { callbacks: { label: function (context) { return ' ' + context.dataset.label + ': ' + money(context.parsed.y); } } };
+            var common = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: false }, tooltip: tooltip } };
+            var lineScale = { x: { grid: { display: false } }, y: { beginAtZero: true, grid: grid, ticks: { callback: money } } };
+            var lineConfig = function (labels, datasets, scales) { return { type: 'line', data: { labels: labels, datasets: datasets }, options: $.extend(true, {}, common, { scales: scales || lineScale, elements: { line: { tension: .38, borderWidth: 3 }, point: { radius: 4, hoverRadius: 6, borderWidth: 2 } } }) }; };
+            var barConfig = function (labels, datasets, scales) { return { type: 'bar', data: { labels: labels, datasets: datasets }, options: $.extend(true, {}, common, { scales: scales || { x: { grid: { display: false } }, y: { beginAtZero: true, grid: grid, ticks: { callback: money } } }, datasets: { bar: { borderRadius: 7, borderSkipped: false, maxBarThickness: 22 } } }) }; };
+            function makeChart(id, config) { var canvas = document.getElementById(id); if (canvas) { new Chart(canvas, config); } }
+            var lineData = function (label, color, fill, values) { return { label: label, data: values, borderColor: color, backgroundColor: fill, fill: true, pointBackgroundColor: color, pointBorderColor: '#fff' }; };
+            makeChart('dashboardMonthlyComparison', lineConfig(chartMonths, [
+                lineData('Income', '#7569d9', 'rgba(117,105,217,.08)', chartIncome),
+                lineData('Expense', '#df5a2f', 'rgba(223,90,47,.05)', chartExpenses),
+                lineData('Fees', '#1b9d75', 'rgba(27,157,117,.12)', chartFees)
+            ]));
+            makeChart('dashboardFeesExpenses', barConfig(chartMonths, [
+                { label: 'Fees Collected', data: chartFees, backgroundColor: '#1b9d75', borderRadius: 7, borderSkipped: false },
+                { label: 'Expenses', data: chartExpenses, backgroundColor: '#d94f7a', borderRadius: 7, borderSkipped: false }
+            ]));
+            var classLabels = [], classPresent = [], classLate = [], classAbsent = [];
+            $.each(classRows, function (_, row) { classLabels.push(row.class_name); classPresent.push(parseInt(row.present, 10) || 0); classLate.push(parseInt(row.late, 10) || 0); classAbsent.push(parseInt(row.absent, 10) || 0); });
+            makeChart('dashboardStudentAttendance', barConfig(classLabels, [
+                { label: 'Present', data: classPresent, backgroundColor: '#609b1b', stack: 'attendance' },
+                { label: 'Late', data: classLate, backgroundColor: '#bd7912', stack: 'attendance' },
+                { label: 'Absent', data: classAbsent, backgroundColor: '#e64b4b', stack: 'attendance' }
+            ], { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: grid, ticks: { precision: 0 } } }));
+            makeChart('dashboardTeacherAttendance', lineConfig(staffDays, [lineData('Present %', '#5748b8', 'rgba(87,72,184,.12)', staffPercent)], { x: { grid: { display: false } }, y: { min: 0, max: 100, grid: grid, ticks: { callback: function (value) { return value + '%'; } } } }));
+        }
+        if (typeof Chart !== 'undefined' && /^4\./.test(Chart.version || '')) { renderDashboardCharts(); }
+        else { $.getScript('<?php echo base_url(); ?>backend/plugins/chartjs/Chart.dashboard.min.js', renderDashboardCharts); }
+    });
+</script>
 
 <script>
     $(function () {

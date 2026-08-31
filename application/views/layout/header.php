@@ -28,6 +28,7 @@
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/plugins/bootstrap-wysihtml5/bootstrap3-wysihtml5.min.css">
 
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/dist/css/custom_style.css">
+        <link rel="stylesheet" href="<?php echo base_url(); ?>backend/dist/css/fee-modern.css">
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/datepicker/css/bootstrap-datetimepicker.css">
         <!--file dropify-->
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/dist/css/dropify.min.css">
@@ -65,9 +66,45 @@
      
   <style type="text/css">
         span.flag-icon.flag-icon-us{text-orientation: mixed;}
+        .main-header, .main-header > .navbar, .main-header .logo { height: 50px; max-height: 50px; }
+        .fixed .content-wrapper, .fixed .right-side { padding-top: 50px; }
+        .fixed .main-sidebar, .fixed .left-side { padding-top: 50px; }
+        .main-header .logo { overflow: hidden; }
+        .main-header .logo .logo-lg, .main-header .logo .logo-mini { height: 50px; align-items: center; justify-content: center; }
+        .main-header .logo .logo-lg { display: flex; }
+        .main-header .logo .logo-lg img { display: block; max-height: 40px; max-width: 188px; width: auto; object-fit: contain; }
+        .main-header .logo .logo-mini img { display: block; max-height: 34px; max-width: 42px; width: auto; object-fit: contain; }
+        .header-school-area, .header-actions-area { height: 50px; }
+        .main-header .sidebar-session { padding: 12px 0; line-height: 26px; }
+        .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: nowrap; gap: 8px; width: 100%; min-width: 0; height: 50px; min-height: 50px; float: none !important; }
+        .header-actions .navbar-form { flex: 1 1 290px; min-width: 220px; max-width: 330px; margin: 0; padding: 0; order: 1; float: none; }
+        .header-actions .navbar-form .input-group { display: table; width: 100%; margin-top: 0; }
+        .header-actions .search-form3 { min-width: 0; width: 100%; height: 38px; }
+        .header-actions .topsidesearchbtn { height: 38px !important; }
+        .today-collection-pill { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 205px; width: 205px; min-width: 0; height: 36px; margin: 0; padding: 0 10px; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; background: linear-gradient(135deg, #159570, #22b982); color: #fff; box-shadow: 0 3px 8px rgba(15,118,90,.2); font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; overflow: hidden; }
+        .today-collection-pill i { flex: 0 0 auto; font-size: 12px; opacity: .95; }
+        .today-collection-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .today-collection-pill strong { display: block; flex: 0 0 auto; min-width: max-content; overflow: visible; text-overflow: clip; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .today-collection-pill:not(.today-profit-pill) { order: 2; }
+        .today-profit-pill { flex-basis: 195px; width: 195px; order: 3; background: linear-gradient(135deg, #5b4ab7, #806bd8); box-shadow: 0 3px 8px rgba(91,74,183,.2); }
+        .today-profit-pill.is-loss { background: linear-gradient(135deg, #c53f55, #e06469); box-shadow: 0 3px 8px rgba(197,63,85,.2); }
+        .header-actions .navbar-custom-menu { flex: 0 0 auto; order: 4; float: none !important; }
+        .header-actions .headertopmenu { display: flex; align-items: center; flex-wrap: nowrap; margin-right: 0; white-space: nowrap; }
+        .header-actions .headertopmenu > li > a { padding-left: 10px; padding-right: 10px; }
+        @media (min-width: 1200px) { .header-school-area { width: 30%; } .header-actions-area { width: 70%; padding-left: 0; } }
+        @media (min-width: 768px) and (max-width: 1499px) { .header-actions { gap: 5px; } .header-actions .navbar-form { min-width: 175px; max-width: 245px; } .today-collection-pill { flex-basis: 132px; width: 132px; padding: 0 8px; } .today-profit-pill { flex-basis: 122px; width: 122px; } .today-collection-label { display: none; } .header-actions .headertopmenu > li > a { padding-left: 8px; padding-right: 8px; } }
+        @media (max-width: 767px) { .main-header { height: 100px; max-height: 100px; } .main-header .logo, .main-header > .navbar { height: 50px; max-height: 50px; } .fixed .content-wrapper, .fixed .right-side { padding-top: 100px; } .fixed .main-sidebar, .fixed .left-side { padding-top: 100px; } .header-actions { gap: 4px; height: 50px; min-height: 50px; } .today-collection-pill { flex-basis: 112px; width: 112px; height: 32px; padding: 0 7px; } .today-profit-pill { flex-basis: 105px; width: 105px; } .today-collection-label { display: none; } }
   </style>
     </head>
-    <body class="hold-transition skin-blue fixed sidebar-mini">
+    <?php
+    $fee_route_root = strtolower((string) $this->uri->segment(1));
+    $fee_route_controller = strtolower((string) $this->uri->segment(2));
+    $fee_admin_controllers = array('feegroup', 'feetype', 'feesforward', 'feemaster', 'feesupdate', 'feediscount');
+    $is_fee_module = $this->session->userdata('top_menu') === 'Fees Collection'
+        || in_array($fee_route_root, array('studentfee', 'challanform', 'familychallanform'), true)
+        || ($fee_route_root === 'admin' && in_array($fee_route_controller, $fee_admin_controllers, true));
+    ?>
+    <body class="hold-transition skin-blue fixed sidebar-mini<?php echo $is_fee_module ? ' fee-module-modern' : ''; ?>">
 
 
  <?php
@@ -120,13 +157,33 @@ if ($this->config->item('SSLK') == "") {
                         <span class="icon-bar"></span>
                         <span class="icon-bar"></span>
                     </a>
-                    <div class="col-lg-5 col-md-3 col-sm-2 col-xs-5">
+                    <div class="col-lg-5 col-md-3 col-sm-2 col-xs-5 header-school-area">
                         <span href="#"  class="sidebar-session">
                             <?php echo $this->setting_model->getCurrentSchoolName(); ?>
                         </span>
                     </div>
-                    <div class="col-lg-7 col-md-9 col-sm-10 col-xs-7">
-                        <div class="pull-right">
+                    <div class="col-lg-7 col-md-9 col-sm-10 col-xs-7 header-actions-area">
+                        <div class="pull-right header-actions">
+                            <?php
+                            if (!isset($today_collection) || !isset($today_profit_loss)) {
+                                $today_header_summary = $this->studentfee_model->getTodayCollectionSummary();
+                                $today_collection = isset($today_header_summary['today_collection']) ? $today_header_summary['today_collection'] : 0;
+                                $today_profit_loss = isset($today_header_summary['today_profit_loss']) ? $today_header_summary['today_profit_loss'] : 0;
+                            }
+                            ?>
+                            <?php if (isset($today_collection)) { $header_currency = $this->customlib->getSchoolCurrencyFormat(); ?>
+                                <span class="today-collection-pill" title="Today's fee collection: <?php echo html_escape($header_currency) . number_format((float) $today_collection, 2); ?>">
+                                    <i class="fa fa-money"></i>
+                                    <span class="today-collection-label">Today's collection</span>
+                                    <strong><?php echo html_escape($header_currency) . number_format((float) $today_collection, 2); ?></strong>
+                                </span>
+                                <?php $is_today_loss = isset($today_profit_loss) && (float) $today_profit_loss < 0; ?>
+                                <span class="today-collection-pill today-profit-pill<?php echo $is_today_loss ? ' is-loss' : ''; ?>" title="Today's profit or loss: <?php echo $is_today_loss ? '-' : ''; ?><?php echo html_escape($header_currency) . number_format(abs((float) $today_profit_loss), 2); ?>">
+                                    <i class="fa <?php echo $is_today_loss ? 'fa-arrow-down' : 'fa-line-chart'; ?>"></i>
+                                    <span class="today-collection-label">Profit/Loss</span>
+                                    <strong><?php echo $is_today_loss ? '-' : ''; ?><?php echo html_escape($header_currency) . number_format(abs((float) $today_profit_loss), 2); ?></strong>
+                                </span>
+                            <?php } ?>
                             <?php if ($this->rbac->hasPrivilege('student', 'can_view')) {?>
                               
                                 <form id="header_search_form" class="navbar-form navbar-left search-form" role="search"  action="<?php echo site_url('admin/admin/search'); ?>" method="POST">

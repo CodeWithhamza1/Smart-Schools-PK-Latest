@@ -69,7 +69,71 @@ class Fee_generation_model extends MY_Model
         return $students;
     }
 
-    public function updateFees(array $payload, $actor_id, $request_id)
+    public function updateDueDates(array $payload, $actor_id, $request_id)
+    {
+        $run = $this->startRun($request_id, 'due_date', $payload, $actor_id);
+        if (isset($run['duplicate']) && $run['duplicate']) {
+            return $run['result'];
+        }
+
+        $counts = $this->emptyCounts();
+        $errors = array();
+        $scope_lock = null;
+
+        try {
+            $this->db->trans_begin();
+            $scope_lock = $this->acquireScopeLock($payload);
+            $students = $this->validatedSelectedStudents($payload);
+            $fees = $this->normaliseFees($payload['fees']);
+            $rows = $this->getExistingFeeRows(array_keys($students), $payload['year'], $payload['month'], array_keys($fees), true);
+            $by_key = array();
+            foreach ($rows as $row) {
+                $key = (int) $row['student_session_id'] . ':' . (int) $row['feetype_id'];
+                $by_key[$key][] = $row;
+            }
+
+            $updates = array();
+            foreach ($fees as $fee_type_id => $fee) {
+                foreach ($this->feeTargetIds($fee, $students) as $student_session_id) {
+                    $key = $student_session_id . ':' . $fee_type_id;
+                    if (empty($by_key[$key])) {
+                        $counts['skipped']++;
+                        continue;
+                    }
+                    if (count($by_key[$key]) !== 1 || !empty($by_key[$key][0]['deposit_id']) || $this->hasSettlement($by_key[$key][0]['amount_detail'])) {
+                        $counts['locked']++;
+                        $errors[] = $students[$student_session_id]['admission_no'] . ' - ' . $fee['type'] . ' is protected; its due date was not changed.';
+                        continue;
+                    }
+                    $updates[] = array('id' => (int) $by_key[$key][0]['fee_groups_feetype_id'], 'due_date' => $payload['due_date']);
+                }
+            }
+
+            foreach (array_chunk($updates, 200) as $chunk) {
+                if ($this->db->update_batch('fee_groups_feetype', $chunk, 'id') === false) {
+                    throw new Exception('Unable to update fee due dates.');
+                }
+            }
+            $counts['updated_fee_rows'] = count($updates);
+            $counts['total'] = count($students);
+            $result = array('status' => 'success', 'run_id' => $request_id, 'counts' => $counts, 'errors' => $errors);
+            $this->finishRun($request_id, 'completed', $result);
+            if ($this->db->trans_status() === false || $this->db->trans_commit() === false) {
+                throw new Exception('The due-date transaction failed.');
+            }
+            $this->releaseScopeLock($scope_lock);
+            return $result;
+        } catch (Exception $e) {
+            $this->db->trans_rollback();
+            $this->releaseScopeLock($scope_lock);
+            $counts['failed']++;
+            $result = array('status' => 'fail', 'run_id' => $request_id, 'counts' => $counts, 'errors' => array($e->getMessage()));
+            $this->finishRun($request_id, 'failed', $result);
+            return $result;
+        }
+    }
+
+    private function updateFees(array $payload, $actor_id, $request_id)
     {
         $run = $this->startRun($request_id, 'update', $payload, $actor_id);
         if (isset($run['duplicate']) && $run['duplicate']) {
@@ -228,6 +292,16 @@ class Fee_generation_model extends MY_Model
                 throw new Exception('No selected student is eligible for this billing month.');
             }
 
+            $fee_targets = array();
+            $targeted_students = array();
+            foreach ($fees as $fee_type_id => $fee) {
+                $fee_targets[$fee_type_id] = array_flip($this->feeTargetIds($fee, $students));
+                foreach ($fee_targets[$fee_type_id] as $student_session_id => $unused) {
+                    $targeted_students[$student_session_id] = true;
+                }
+            }
+            $students = array_intersect_key($students, $targeted_students);
+
             $fee_groups = $this->ensureStudentFeeGroups($students);
             $session_groups = $this->ensureFeeSessionGroups($fee_groups);
             $fee_masters = $this->ensureStudentFeeMasters($students, $fee_groups, $session_groups);
@@ -246,6 +320,9 @@ class Fee_generation_model extends MY_Model
                 $fee_group_id = $fee_groups[(int) $student['student_id']];
                 $fee_session_group_id = $session_groups[$fee_group_id];
                 foreach ($fees as $fee_type_id => $fee) {
+                    if (!isset($fee_targets[$fee_type_id][$student_session_id])) {
+                        continue;
+                    }
                     $key = $student_session_id . ':' . $fee_type_id;
                     if (isset($existing_keys[$key])) {
                         $counts['existing']++;
@@ -392,9 +469,23 @@ class Fee_generation_model extends MY_Model
                 'type'   => $known[$id]['type'],
                 'code'   => $known[$id]['code'],
                 'amount' => $this->money(isset($fee['amount']) ? $fee['amount'] : 0),
+                'student_session_ids' => isset($fee['student_session_ids']) && is_array($fee['student_session_ids'])
+                    ? array_values(array_unique(array_map('intval', $fee['student_session_ids'])))
+                    : array(),
             );
         }
         return $result;
+    }
+
+    private function feeTargetIds(array $fee, array $students)
+    {
+        $allowed = array_map('intval', array_keys($students));
+        $requested = isset($fee['student_session_ids']) ? array_map('intval', $fee['student_session_ids']) : array();
+        $targets = array_values(array_intersect($requested, $allowed));
+        if (empty($targets)) {
+            throw new Exception($fee['type'] . ' must have at least one selected student.');
+        }
+        return $targets;
     }
 
     private function feeAmount(array $student, array $fee)
@@ -779,6 +870,85 @@ class Fee_generation_model extends MY_Model
         }
     }
 
+    public function getGenerationRecords($limit = 500)
+    {
+        if (!$this->db->table_exists('fee_generation_runs')) {
+            return array();
+        }
+        $select = 'id, request_id, action, staff_id, session_id, class_id, section_id, fee_year, fee_month, status, result_json, error_summary, created_at, updated_at';
+        if ($this->db->field_exists('payload_json', 'fee_generation_runs')) {
+            $select .= ', payload_json';
+        }
+        $rows = $this->db->select($select)
+            ->from('fee_generation_runs')
+            ->order_by('id', 'desc')
+            ->limit(max(1, min(1000, (int) $limit)))
+            ->get()->result_array();
+        foreach ($rows as &$row) {
+            $result = !empty($row['result_json']) ? json_decode($row['result_json'], true) : array();
+            $row['counts'] = is_array($result) && isset($result['counts']) ? $result['counts'] : array();
+            $payload = isset($row['payload_json']) && !empty($row['payload_json']) ? json_decode($row['payload_json'], true) : array();
+            $row['student_count'] = 0;
+            if (is_array($payload) && !empty($payload['students'])) {
+                foreach ($payload['students'] as $student) {
+                    if (!empty($student['selected'])) {
+                        $row['student_count']++;
+                    }
+                }
+            }
+            $row['fee_type_count'] = is_array($payload) && isset($payload['fees']) && is_array($payload['fees']) ? count($payload['fees']) : 0;
+        }
+        unset($row);
+        return $rows;
+    }
+
+    public function getChangeFeeRows()
+    {
+        $this->db->select('fgft.id, fgft.fee_session_group_id, fgft.feetype_id, fgft.amount, fgft.due_date,
+            fgft.clnd_month, fgft.year, ft.type AS fee_type, ft.code AS fee_code, fg.id AS fee_group_id,
+            fg.student_id, s.admission_no, s.firstname, s.middlename, s.lastname, ss.id AS student_session_id,
+            c.class, sec.section, sfd.id AS deposit_id, sfd.amount_detail', false);
+        $this->db->from('fee_groups_feetype fgft');
+        $this->db->join('feetype ft', 'ft.id = fgft.feetype_id');
+        $this->db->join('fee_session_groups fsg', 'fsg.id = fgft.fee_session_group_id');
+        $this->db->join('fee_groups fg', 'fg.id = fsg.fee_groups_id');
+        $this->db->join('students s', 's.id = fg.student_id', 'left');
+        $this->db->join('student_session ss', 'ss.student_id = s.id AND ss.session_id = ' . $this->db->escape($this->current_session), 'left');
+        $this->db->join('classes c', 'c.id = ss.class_id', 'left');
+        $this->db->join('sections sec', 'sec.id = ss.section_id', 'left');
+        $this->db->join('student_fees_master sfm', 'sfm.student_session_id = ss.id AND sfm.fee_session_group_id = fsg.id', 'left');
+        $this->db->join('student_fees_deposite sfd', 'sfd.student_fees_master_id = sfm.id AND sfd.fee_groups_feetype_id = fgft.id', 'left');
+        $this->db->where('fsg.session_id', $this->current_session);
+        $this->db->where('fg.is_system', 0);
+        $this->db->order_by('fgft.year', 'desc')->order_by('fgft.clnd_month', 'desc')->order_by('s.admission_no', 'asc')->order_by('fgft.id', 'desc');
+        $raw = $this->db->get()->result_array();
+
+        $rows = array();
+        $duplicates = array();
+        foreach ($raw as $row) {
+            $id = (int) $row['id'];
+            $key = (int) $row['student_id'] . ':' . (int) $row['feetype_id'] . ':' . (int) $row['year'] . ':' . (int) $row['clnd_month'];
+            if (!isset($duplicates[$key])) {
+                $duplicates[$key] = array();
+            }
+            $duplicates[$key][$id] = true;
+            if (!isset($rows[$id])) {
+                $row['protected'] = false;
+                $row['duplicate_key'] = $key;
+                $rows[$id] = $row;
+            }
+            if (!empty($row['deposit_id']) || $this->hasSettlement($row['amount_detail'])) {
+                $rows[$id]['protected'] = true;
+            }
+        }
+        foreach ($rows as &$row) {
+            $row['duplicate'] = isset($duplicates[$row['duplicate_key']]) && count($duplicates[$row['duplicate_key']]) > 1;
+            unset($row['duplicate_key']);
+        }
+        unset($row);
+        return array_values($rows);
+    }
+
     private function startRun($request_id, $action, array $payload, $actor_id)
     {
         if (!$this->db->table_exists('fee_generation_runs')) {
@@ -795,7 +965,7 @@ class Fee_generation_model extends MY_Model
             }
             throw new Exception('This fee operation is already being processed.');
         }
-        $inserted = $this->db->insert('fee_generation_runs', array(
+        $run_data = array(
             'request_id'   => $request_id,
             'action'       => $action,
             'staff_id'     => (int) $actor_id,
@@ -808,7 +978,13 @@ class Fee_generation_model extends MY_Model
             'status'       => 'processing',
             'created_at'   => date('Y-m-d H:i:s'),
             'updated_at'   => date('Y-m-d H:i:s'),
-        ));
+        );
+        if ($this->db->field_exists('payload_json', 'fee_generation_runs')) {
+            $audit_payload = $payload;
+            unset($audit_payload['operation_token'], $audit_payload['request_nonce'], $audit_payload['request_id']);
+            $run_data['payload_json'] = json_encode($audit_payload);
+        }
+        $inserted = $this->db->insert('fee_generation_runs', $run_data);
         if (!$inserted) {
             throw new Exception('Unable to reserve this fee operation. Please retry once.');
         }
