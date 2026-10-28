@@ -1425,3 +1425,156 @@ if ($this->rbac->hasPrivilege('general_setting', 'can_view')) {
         </ul>
     </section>
 </aside>
+<script>
+    // Dynamic logo sizing: classify each header logo by aspect ratio so the CSS can fit it
+    // (wide banners fill the bar, square marks stay square) and fall back to text if it fails to load.
+    (function () {
+        var imgs = document.querySelectorAll('.main-header .logo img');
+
+        function classify(img) {
+            var w = img.naturalWidth, h = img.naturalHeight;
+            if (!w || !h) { return; }
+            var ratio = w / h;
+            img.parentNode.setAttribute('data-logo-shape', ratio >= 2.4 ? 'wide' : (ratio >= 1.25 ? 'landscape' : 'square'));
+        }
+
+        function fallback(img) {
+            var text = document.createElement('b');
+            text.className = 'logo-fallback';
+            var label = img.alt || '';
+            text.textContent = img.parentNode.className.indexOf('logo-mini') > -1 ? label.charAt(0) : label;
+            img.parentNode.replaceChild(text, img);
+        }
+
+        Array.prototype.forEach.call(imgs, function (img) {
+            if (img.complete) {
+                img.naturalWidth ? classify(img) : fallback(img);
+            } else {
+                img.addEventListener('load', function () { classify(img); });
+                img.addEventListener('error', function () { fallback(img); });
+            }
+        });
+    })();
+
+    // Sidebar UX: live menu filter, "/" or Ctrl+K to focus it, and remembered scroll position.
+    (function () {
+        var menu = document.querySelector('.main-sidebar .sidebar-menu');
+        var input = document.getElementById('sbMenuSearch');
+        if (!menu) { return; }
+
+        function store(key, value) {
+            try { value === null ? sessionStorage.removeItem(key) : sessionStorage.setItem(key, value); } catch (e) {}
+        }
+        function read(key) {
+            try { return sessionStorage.getItem(key); } catch (e) { return null; }
+        }
+
+        /* ---- filter ---- */
+        var empty = document.createElement('li');
+        empty.className = 'sb-empty';
+        empty.innerHTML = '<i class="fa fa-search"></i><span></span>';
+        empty.lastChild.textContent = input ? input.getAttribute('data-empty') : '';
+        menu.appendChild(empty);
+
+        function ownText(li) {
+            var a = li.querySelector(':scope > a');
+            return a ? a.textContent.replace(/\s+/g, ' ').toLowerCase() : '';
+        }
+
+        // returns true when the item, one of its descendants, or an ancestor matches
+        function mark(li, term, ancestorMatched) {
+            var own = ownText(li).indexOf(term) > -1;
+            var children = li.querySelectorAll(':scope > .treeview-menu > li');
+            var childHit = false;
+            Array.prototype.forEach.call(children, function (child) {
+                if (mark(child, term, ancestorMatched || own)) { childHit = true; }
+            });
+            var show = own || childHit || ancestorMatched;
+            li.classList.toggle('sb-match', show);
+            li.classList.toggle('sb-open', children.length > 0 && (own || childHit));
+            return show;
+        }
+
+        function clearFilter() {
+            menu.classList.remove('sb-filtering', 'sb-none');
+            Array.prototype.forEach.call(menu.querySelectorAll('.sb-match, .sb-open'), function (li) {
+                li.classList.remove('sb-match', 'sb-open');
+            });
+        }
+
+        function applyFilter() {
+            var term = input.value.replace(/\s+/g, ' ').trim().toLowerCase();
+            if (!term) { clearFilter(); return; }
+            var any = false;
+            menu.classList.add('sb-filtering');
+            Array.prototype.forEach.call(menu.querySelectorAll(':scope > li:not(.sb-empty)'), function (li) {
+                if (mark(li, term, false)) { any = true; }
+            });
+            menu.classList.toggle('sb-none', !any);
+            scrollSidebar(0);
+        }
+
+        if (input) {
+            input.addEventListener('input', applyFilter);
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    input.value = '';
+                    clearFilter();
+                    input.blur();
+                } else if (e.key === 'Enter') {
+                    var hit = menu.querySelector('li.sb-match:not(.treeview) > a[href]:not([href="#"])');
+                    if (hit) { window.location.href = hit.href; }
+                    e.preventDefault();
+                }
+            });
+
+            document.addEventListener('keydown', function (e) {
+                var tag = (e.target.tagName || '').toLowerCase();
+                var typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+                var wanted = (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k');
+                if (!wanted || typing || !input.offsetParent) { return; }
+                e.preventDefault();
+                input.focus();
+                input.select();
+            });
+        }
+
+        /* ---- scroll position ---- */
+        function scroller() {
+            return window.jQuery ? window.jQuery('.main-sidebar .sidebar') : null;
+        }
+
+        function scrollSidebar(value) {
+            var $s = scroller();
+            if (!$s) { return; }
+            if ($s.parent().hasClass('slimScrollDiv') && $s.slimScroll) {
+                $s.slimScroll({ scrollTo: value + 'px' });
+            } else {
+                $s.scrollTop(value);
+            }
+        }
+
+        function ensureActiveVisible() {
+            var $s = scroller();
+            var active = menu.querySelector(':scope > li.active');
+            var block = document.querySelector('.main-sidebar .fixedmenu');
+            if (!$s || !active) { return; }
+            var rect = active.getBoundingClientRect();
+            var top = block ? block.getBoundingClientRect().bottom : 0;
+            if (rect.top < top || rect.top > window.innerHeight - 80) {
+                scrollSidebar(Math.max(0, $s.scrollTop() + rect.top - top - 8));
+            }
+        }
+
+        window.addEventListener('load', function () {
+            var saved = parseInt(read('sidebar-scroll'), 10);
+            if (!isNaN(saved) && saved > 0) { scrollSidebar(saved); }
+            setTimeout(ensureActiveVisible, 50);
+        });
+
+        window.addEventListener('beforeunload', function () {
+            var $s = scroller();
+            if ($s) { store('sidebar-scroll', String($s.scrollTop())); }
+        });
+    })();
+</script>

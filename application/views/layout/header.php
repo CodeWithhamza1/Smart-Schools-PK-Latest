@@ -29,6 +29,7 @@
 
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/dist/css/custom_style.css">
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/dist/css/fee-modern.css">
+        <link rel="stylesheet" href="<?php echo base_url(); ?>backend/dist/css/sidebar-modern.css?v=<?php echo (int) @filemtime(FCPATH . 'backend/dist/css/sidebar-modern.css'); ?>">
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/datepicker/css/bootstrap-datetimepicker.css">
         <!--file dropify-->
         <link rel="stylesheet" href="<?php echo base_url(); ?>backend/dist/css/dropify.min.css">
@@ -69,11 +70,6 @@
         .main-header, .main-header > .navbar, .main-header .logo { height: 50px; max-height: 50px; }
         .fixed .content-wrapper, .fixed .right-side { padding-top: 50px; }
         .fixed .main-sidebar, .fixed .left-side { padding-top: 50px; }
-        .main-header .logo { overflow: hidden; }
-        .main-header .logo .logo-lg, .main-header .logo .logo-mini { height: 50px; align-items: center; justify-content: center; }
-        .main-header .logo .logo-lg { display: flex; }
-        .main-header .logo .logo-lg img { display: block; max-height: 40px; max-width: 188px; width: auto; object-fit: contain; }
-        .main-header .logo .logo-mini img { display: block; max-height: 34px; max-width: 42px; width: auto; object-fit: contain; }
         .header-school-area, .header-actions-area { height: 50px; }
         .main-header .sidebar-session { padding: 12px 0; line-height: 26px; }
         .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: nowrap; gap: 8px; width: 100%; min-width: 0; height: 50px; min-height: 50px; float: none !important; }
