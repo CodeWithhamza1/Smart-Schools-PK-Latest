@@ -102,6 +102,8 @@
 .ss-ai-session:hover .ss-ai-session-del,.ss-ai-session-del.confirm,.ss-ai-session-del:focus-visible{opacity:1}.ss-ai-session-del:hover{color:#dc2626}.ss-ai-session-del.confirm{background:#fee2e2;color:#dc2626}.ss-ai-session-del svg{width:14px;height:14px}
 .ss-ai-empty{padding:26px 14px;text-align:center;color:var(--ai-muted);font-size:12.5px}
 .ss-ai-drawer-foot{padding:10px 16px 14px;border-top:1px solid var(--ai-line);color:var(--ai-muted);font-size:11px;line-height:1.5}
+.ss-ai-kb{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding:8px 10px;border-radius:10px;background:var(--ai-soft);color:#4b5373;font-weight:600}
+.ss-ai-kb-refresh{flex:none;padding:4px 10px;border:1px solid #c9d0f5;border-radius:8px;background:#fff;color:var(--ai-a);font-size:11px;font-weight:700;cursor:pointer}.ss-ai-kb-refresh:disabled{opacity:.5;cursor:wait}
 
 /* composer */
 .ss-ai-composer{padding:10px 14px 12px;border-top:1px solid var(--ai-line);background:#fff}
@@ -159,7 +161,10 @@
       <div class="ss-ai-drawer-head"><span>Chat history</span><button class="ss-ai-icon ss-ai-drawer-close" type="button" aria-label="Close history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
       <button class="ss-ai-new" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> New chat</button>
       <div class="ss-ai-sessions"></div>
-      <div class="ss-ai-drawer-foot">Chats are private to you and are deleted automatically after 48 hours.</div>
+      <div class="ss-ai-drawer-foot">
+        <div class="ss-ai-kb"><span class="ss-ai-kb-text">Knowledge base: loading…</span><button class="ss-ai-kb-refresh" type="button" title="Re-read the app's menus, pages, code and database">Refresh</button></div>
+        Chats are private to you and are deleted automatically after 48 hours. Teach me with “Remember that …”.
+      </div>
     </aside>
   </div>
 
@@ -195,7 +200,7 @@
   /* ---------- open / close ---------- */
   function openWidget(){
     root.classList.add('open');root.setAttribute('aria-hidden','false');if(launcher)launcher.style.display='none';
-    if(!booted){booted=true;if(current){loadHistory(current,true)}else{showWelcome()}loadSessions()}
+    if(!booted){booted=true;if(current){loadHistory(current,true)}else{showWelcome()}loadSessions();loadKnowledge()}
     autosize();
     setTimeout(function(){autosize();input.focus()},220);
   }
@@ -259,6 +264,7 @@
   function sourceLabel(tool){
     return String(tool||'').split(',').map(function(s){s=s.trim();if(!s)return '';
       if(s==='read_only_sql')return 'Custom query';if(s==='get_database_schema')return 'Database lookup';
+      if(s==='search_knowledge'||s==='knowledge_base')return 'Knowledge base';if(s==='save_knowledge')return 'Learned something new';if(s==='forget_knowledge')return 'Forgot a fact';
       if(s.indexOf('school_report:')===0){var n=s.slice(14).replace(/_/g,' ');return n.charAt(0).toUpperCase()+n.slice(1)}
       if(s==='school_report')return 'School report';
       var n2=s.replace(/_/g,' ');return n2.charAt(0).toUpperCase()+n2.slice(1)}).filter(Boolean);
@@ -370,6 +376,21 @@
       toBottom(true);root.classList.remove('drawer-open');loadSessions();
     }).catch(function(){showWelcome();if(!silent)addError('NETWORK_ERROR')});
   }
+  /* ---------- knowledge base status ---------- */
+  var kbText=root.querySelector('.ss-ai-kb-text'),kbBtn=root.querySelector('.ss-ai-kb-refresh');
+  function showKnowledge(k){
+    if(!k){kbText.textContent='Knowledge base: unavailable';return}
+    var learned=(k.by_source&&((k.by_source.admin||0)+(k.by_source.learned_query||0)))||0;
+    kbText.textContent='Knowledge base: '+(k.total||0)+' entries'+(learned?' · '+learned+' learned':'');
+    kbText.title=k.built_at?'Last indexed '+k.built_at:'';
+  }
+  // Opening the widget also refreshes a stale index on the server, so questions never wait for it.
+  function loadKnowledge(){fetch(url('ai_widget/knowledge_stats'),{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){showKnowledge(j.error?null:j.knowledge)}).catch(function(){showKnowledge(null)})}
+  kbBtn.addEventListener('click',function(){
+    kbBtn.disabled=true;kbText.textContent='Re-reading the app…';
+    post('ai_widget/rebuild_knowledge',{}).then(function(j){showKnowledge(j.error?null:j.knowledge);if(j.error)kbText.textContent=j.message||'Refresh failed'}).catch(function(){showKnowledge(null)}).then(function(){kbBtn.disabled=false});
+  });
+
   function dayGroup(value){
     var d=new Date(String(value).replace(' ','T'));if(isNaN(d))return 'Earlier';
     var now=new Date(),start=new Date(now.getFullYear(),now.getMonth(),now.getDate()),diff=(start-new Date(d.getFullYear(),d.getMonth(),d.getDate()))/864e5;

@@ -18,6 +18,8 @@ $route['ai_widget/ask'] = 'ai_widget/ask';
 $route['ai_widget/sessions'] = 'ai_widget/sessions';
 $route['ai_widget/history/(:any)'] = 'ai_widget/history/$1';
 $route['ai_widget/new_session'] = 'ai_widget/new_session';
+$route['ai_widget/rebuild_knowledge'] = 'ai_widget/rebuild_knowledge';
+$route['ai_widget/knowledge_stats'] = 'ai_widget/knowledge_stats';
 $route['ai_widget/delete_session/(:any)'] = 'ai_widget/delete_session/$1';
 $route['cron/ai_widget_cleanup/(:any)'] = 'cron/ai_widget_cleanup/$1';
 

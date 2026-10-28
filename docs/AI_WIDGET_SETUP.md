@@ -38,3 +38,13 @@ Common questions are answered straight from the database before the AI is called
 ## Troubleshooting
 
 If the widget says the AI service rejected the key (HTTP 401), create a new key at console.groq.com and set it in `application/config/groq.php` (`$config['groq_api_key']`) or in the `GROQ_API_KEY` environment variable, which takes priority. If it says the server could not reach the AI service, check internet access and the `curl.cainfo` certificate bundle in php.ini. The exact reason is also written to `application/logs/` (`Groq rejected the API key`, `Groq network failure`, `Groq HTTP failure`).
+
+## Knowledge base (how the assistant knows the software)
+
+The AI model itself is hosted by Groq and cannot be retrained by the app. Instead the assistant uses a knowledge base stored in the `ai_widget_knowledge` table (created automatically; `application/migrations/005_create_ai_knowledge.sql` does the same):
+
+- **Auto-indexed from the app**: every sidebar menu path and its URL, every page (controller method that renders a view) with its form fields and section titles, all controllers and their URLs, all models with the tables they use, every database table with its columns, `docs/*.md` and `application/migrations/*.sql`. The index rebuilds itself when controllers, models, the sidebar, routes, docs or migrations change (checked at most every 10 minutes, and when the widget opens). Use **Refresh** in the chat history drawer to rebuild it immediately.
+- **Taught by admins**: say "Remember that ..." and the assistant stores it (`save_knowledge`); "Forget ..." removes it.
+- **Learned automatically**: when a custom SQL query answers a question, the question and SQL are saved and reused for similar questions (newest 400 kept).
+
+Before each AI question the most relevant entries are added to the prompt, and the assistant can search further with the `search_knowledge` tool. If the AI service is down, how-to questions are answered from the knowledge base directly.

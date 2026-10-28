@@ -10,6 +10,7 @@ class Ai_widget extends Admin_Controller
         parent::__construct();
         $this->config->load('groq');
         $this->load->model('ai_widget_model');
+        $this->load->model('ai_knowledge_model');
         $this->user = $this->session->userdata('admin');
         if (!$this->eligible()) {
             $this->output->set_status_header(403)->set_content_type('application/json')->set_output(json_encode(array(
@@ -63,11 +64,37 @@ class Ai_widget extends Admin_Controller
             try {
                 $args = $this->infer_report_args($question);
                 if (!empty($args)) return $this->answer_from_report($session_id, $question, $args, true);
+                $hits = $this->ai_knowledge_model->search($question, 3, 1500);
+                if (!empty($hits)) {
+                    $lines = array('The AI service is unavailable, but this is what I found in the app\'s knowledge base:');
+                    foreach ($hits as $hit) $lines[] = '- ' . $hit['topic'] . ': ' . $hit['content'];
+                    return $this->finish_report($session_id, $question, 'knowledge_base', array(), implode("\n", $lines), array('ai_offline' => true));
+                }
             } catch (Throwable $fallback_error) {
                 log_message('error', 'AI widget fallback failure: ' . $fallback_error->getMessage());
             }
             return $this->ai_unavailable($e->getMessage());
         }
+    }
+
+    /** Re-indexes the app (menu, pages, code, tables, docs) into the knowledge base. */
+    public function rebuild_knowledge()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') return $this->json_error('INVALID_INPUT', 'Invalid request.', 405);
+        try {
+            $stats = $this->ai_knowledge_model->refresh_if_stale(true);
+            return $this->respond(array('error' => false, 'rebuilt' => $stats, 'knowledge' => $this->ai_knowledge_model->stats()));
+        } catch (Throwable $e) {
+            log_message('error', 'AI knowledge rebuild failed: ' . $e->getMessage());
+            return $this->json_error('SERVER_ERROR', 'The knowledge base could not be rebuilt: ' . substr($e->getMessage(), 0, 200), 500);
+        }
+    }
+
+    /** Called by the widget when it opens: refreshes a stale index in the background so questions never wait for it. */
+    public function knowledge_stats()
+    {
+        try { $this->ai_knowledge_model->refresh_if_stale(); } catch (Throwable $e) { log_message('error', 'AI knowledge refresh failed: ' . $e->getMessage()); }
+        $this->respond(array('error' => false, 'knowledge' => $this->ai_knowledge_model->stats()));
     }
 
     public function sessions() { $this->cleanup_expired_opportunistically(); $this->respond(array('error' => false, 'sessions' => $this->ai_widget_model->sessions($this->user['id']))); }
@@ -83,15 +110,27 @@ class Ai_widget extends Admin_Controller
     {
         @set_time_limit(120);
         $max_steps = 6;
-        $messages = array(array('role' => 'system', 'content' => $this->agent_prompt()));
+        $system = $this->agent_prompt();
+        try {
+            $this->ai_knowledge_model->refresh_if_stale();
+            $hits = $this->ai_knowledge_model->search($question, 5, 2200);
+            if (!empty($hits)) {
+                $system .= "\n\nRelevant knowledge base entries (from the app's source code, database and what admins taught you; cite menu paths exactly):";
+                foreach ($hits as $hit) $system .= "\n[#" . $hit['id'] . ' ' . $hit['source'] . '] ' . $hit['topic'] . ': ' . $hit['content'];
+            }
+        } catch (Throwable $e) {
+            log_message('error', 'AI knowledge lookup failed: ' . $e->getMessage());
+        }
+        $messages = array(array('role' => 'system', 'content' => $system));
         foreach ($this->ai_widget_model->recent_messages($this->user['id'], $session_id, 4) as $message) {
             if (!in_array($message['role'], array('user', 'assistant'), true)) continue;
             $messages[] = array('role' => $message['role'], 'content' => substr((string) $message['content'], 0, 700));
         }
         $messages[] = array('role' => 'user', 'content' => $question);
 
-        $tools = $this->ai_widget_model->agent_tool_definitions();
+        $tools = array_merge($this->ai_widget_model->agent_tool_definitions(), $this->knowledge_tools());
         $used = array();
+        $working_sql = '';
         for ($step = 1; $step <= $max_steps; $step++) {
             // On the last step no tools are offered, which forces the model to answer with what it has.
             $offered = $step === $max_steps ? array() : $tools;
@@ -105,6 +144,9 @@ class Ai_widget extends Admin_Controller
             if (empty($response['tool_calls'])) {
                 $reply = trim((string) $response['content']);
                 if ($reply === '') $reply = 'I could not find an answer for that. Please try rephrasing with a class, date or name.';
+                if ($working_sql !== '') {
+                    try { $this->ai_knowledge_model->learn_query($question, $working_sql, $reply, (int) $this->user['id']); } catch (Throwable $e) { log_message('error', 'AI learn_query failed: ' . $e->getMessage()); }
+                }
                 return array('reply' => $reply, 'tool' => empty($used) ? null : substr(implode(', ', array_keys($used)), 0, 100));
             }
 
@@ -116,7 +158,8 @@ class Ai_widget extends Admin_Controller
                 if (!is_array($args)) $args = array();
                 $result = $this->run_tool($name, $args);
                 $label = $name === 'school_report' && !empty($args['report_type']) ? $name . ':' . preg_replace('/[^a-z_]/', '', strtolower((string) $args['report_type'])) : $name;
-                if (in_array($name, array('school_report', 'get_database_schema', 'read_only_sql'), true)) $used[$label] = true;
+                if (in_array($name, array('school_report', 'get_database_schema', 'read_only_sql', 'search_knowledge', 'save_knowledge', 'forget_knowledge'), true)) $used[$label] = true;
+                if ($name === 'read_only_sql' && isset($result['rows']) && !empty($result['rows']) && !empty($args['sql'])) $working_sql = (string) $args['sql'];
                 $json = json_encode($result, JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_UNESCAPED_UNICODE);
                 if ($json === false) $json = '{"tool_error":"Result could not be encoded"}';
                 if (strlen($json) > 5000) $json = substr($json, 0, 5000) . ' ...[truncated: more rows exist, narrow the question or use aggregates]';
@@ -132,7 +175,27 @@ class Ai_widget extends Admin_Controller
         $user_id = (int) $this->user['id'];
         if ($name === 'school_report') return $this->ai_widget_model->execute_school_report($args, $role, $user_id);
         if ($name === 'get_database_schema' || $name === 'read_only_sql') return $this->ai_widget_model->execute_tool_for_ai($name, $args, $role, $user_id);
-        return array('tool_error' => 'Unknown tool. Use school_report, get_database_schema or read_only_sql.');
+        try {
+            if ($name === 'search_knowledge') return array('results' => $this->ai_knowledge_model->search(isset($args['query']) ? (string) $args['query'] : '', 6, 3500));
+            if ($name === 'save_knowledge') return $this->ai_knowledge_model->remember(isset($args['topic']) ? $args['topic'] : '', isset($args['content']) ? $args['content'] : '', $user_id);
+            if ($name === 'forget_knowledge') return $this->ai_knowledge_model->forget(isset($args['id']) ? (int) $args['id'] : 0);
+        } catch (Throwable $e) {
+            log_message('error', 'AI knowledge tool failed: ' . $e->getMessage());
+            return array('tool_error' => substr($e->getMessage(), 0, 300));
+        }
+        return array('tool_error' => 'Unknown tool. Use school_report, get_database_schema, read_only_sql, search_knowledge, save_knowledge or forget_knowledge.');
+    }
+
+    private function knowledge_tools()
+    {
+        $tool = function ($name, $description, $properties, $required) {
+            return array('type' => 'function', 'function' => array('name' => $name, 'description' => $description, 'parameters' => array('type' => 'object', 'properties' => $properties, 'required' => $required)));
+        };
+        return array(
+            $tool('search_knowledge', 'Search the knowledge base about this school software: where every page is in the sidebar menu, what each page lets you configure (its form fields), routes, controllers, models, database tables and columns, docs, facts admins taught you, and SQL that answered earlier questions. Use it for how-to, where-is, setup and configuration questions, and before saying something does not exist.', array('query' => array('type' => 'string', 'description' => 'A few keywords, e.g. "voucher settings" or "transport route fees".')), array('query')),
+            $tool('save_knowledge', 'Remember a fact for the future. Use ONLY when the administrator explicitly teaches or corrects you (e.g. "remember that...", "note that...", "actually, ..."). One clear topic and the fact in plain words.', array('topic' => array('type' => 'string'), 'content' => array('type' => 'string')), array('topic', 'content')),
+            $tool('forget_knowledge', 'Delete a fact you were taught or a learned query, by its id (shown as #id in knowledge results), when the administrator asks you to forget it or it is wrong.', array('id' => array('type' => 'integer')), array('id'))
+        );
     }
 
     private function agent_prompt()
@@ -142,6 +205,7 @@ class Ai_widget extends Admin_Controller
             . 'Tools: (1) school_report: ready-made reports; use it whenever a report type fits, and always for fees: pending_fee_total (all pending fees), pending_fee_summary (one month), pending_fee_students (who owes, with parent contacts), due_fees, fee_collection (money received between two dates); and students_by_class for student counts per class. (2) get_database_schema: no arguments lists table names; tables=[...] returns their columns; search="word" finds table names. (3) read_only_sql: one SELECT (up to 200 rows) on ANY table in the database for anything else: counts, GROUP BY totals, joins across several tables, subqueries, UNION and date filters. The whole school database is available (students, parents, fees, exams, attendance, library, hostel, transport, inventory, payroll, homework, front office, certificates and so on), so never say a table does not exist before checking with get_database_schema (search="word" finds tables). Check real column names with get_database_schema before writing SQL for tables not listed below. Password and secret columns are hidden. If a query fails, read the error, fix it and try again. Prefer aggregates (COUNT, SUM, GROUP BY) over listing many rows.' . "\n"
             . 'Known tables: students(id, admission_no, firstname, middlename, lastname, gender, dob, guardian_name, guardian_phone, is_active = yes/no); student_session(id, student_id, session_id, class_id, section_id) links students to classes for a session, so filter student_session.session_id = the current session_id and students.is_active = yes; classes(id, class); sections(id, section); sessions(id, session) = academic years, e.g. 2025-26; staff(id, employee_id, name, surname, contact_no, email, is_active = 1/0); income(date, name, amount); expenses(date, name, amount); attendance_logs(admission_no, timestamp, status). Use LIKE for name searches.' . "\n"
             . 'Fee payments are stored as JSON inside student_fees_deposite.amount_detail, so SQL cannot total them; use school_report for anything about fees paid, collected, due or pending.' . "\n"
+            . 'You also know the software itself: a knowledge base indexes every sidebar menu path, page and its form fields, controller, model, table, doc and migration, plus facts admins taught you. For how-to, where-is, setup or configuration questions answer with the exact sidebar path (e.g. System Settings > Voucher Settings), the page URL and what can be set there, using the knowledge entries below or search_knowledge. When the administrator teaches or corrects you, call save_knowledge so you remember it next time. Never claim a feature or table does not exist without searching the knowledge base and the schema first. If a table from a migration is missing in the database, say the migration file needs to be imported.' . "\n"
             . 'Reply style: plain text only (no markdown, asterisks or tables), short lines, each list item on its own line starting with "- ", amounts as PKR with thousands separators, and say when a list is limited to the first N rows. For greetings or general chat answer briefly without tools. If you cannot find the data, say so plainly and suggest a more specific question.';
     }
 
@@ -293,6 +357,7 @@ class Ai_widget extends Admin_Controller
     {
         $q = strtolower(trim($question));
         if ($q === '' || str_word_count($q) > 14) return null; // long or detailed questions are better handled by the AI
+        if (preg_match('/\b(how (do|to|can|should)|where|configure|configuration|settings?|setup|set up|change|edit|enable|disable|create|add|remember|forget|note that)\b/', $q)) return null; // how-to and teaching questions go to the AI
 
         if (preg_match('/\bsession\b/', $q) && !preg_match('/\b(attendance|class|classes|section|student|students|fee|fees|staff|exam|change|switch|create|add|delete|list|all|previous|old|past|next)\b/', $q) && str_word_count($q) <= 8) return array('report_type' => 'current_session');
         $about_students = (bool) preg_match('/\b(students?|pupils?|children|kids|strength|enrol+ed|enrol+ment)\b/', $q);
