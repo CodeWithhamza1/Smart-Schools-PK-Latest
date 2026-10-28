@@ -52,44 +52,22 @@ class Ai_widget extends Admin_Controller
         }
 
         try {
-            $messages = array(array('role' => 'system', 'content' => $this->system_prompt()));
-            foreach ($this->ai_widget_model->recent_messages($this->user['id'], $session_id, 4) as $message) {
-                $messages[] = array('role' => $message['role'], 'content' => $message['content']);
-            }
-            $messages[] = array('role' => 'user', 'content' => $question);
-            $selection = $this->groq($this->trim_messages($messages), $this->ai_widget_model->tool_definitions($question));
-            if (empty($selection['tool_calls'])) {
-                $args = $this->infer_report_args($question);
-                if (empty($args)) { $reply = trim((string) $selection['content']); if ($reply === '') $reply = 'Please ask for a specific school report or record.'; return $this->finish_report($session_id, $question, null, array(), $reply); }
-            } else {
-                $call = $selection['tool_calls'][0];
-                if (!isset($call['function']['name']) || $call['function']['name'] !== 'school_report') throw new RuntimeException('INVALID_TOOL');
-                $args = json_decode($call['function']['arguments'], true);
-                if (!is_array($args)) $args = $this->infer_report_args($question);
-                if (empty($args)) throw new RuntimeException('INVALID_TOOL_ARGS');
-            }
-            $report_type = isset($args['report_type']) ? strtolower(trim($args['report_type'])) : 'school_report';
-            $result = $this->ai_widget_model->execute_school_report($args, $this->primary_role(), (int) $this->user['id']);
-            $fallback = $this->format_result_fallback($report_type, $result);
-
-            try {
-                $result_json = json_encode($result);
-                if (strlen($result_json) > 6000) $result_json = substr($result_json, 0, 6000) . ' [truncated]';
-                $format_messages = array(
-                    array('role' => 'system', 'content' => 'Format the verified school report data into a concise answer. Use PKR for money. Do not invent values, SQL, or missing records. Use short lines for lists and mention when results are limited.'),
-                    array('role' => 'user', 'content' => "Question: " . $question . "\nVerified report data: " . $result_json)
-                );
-                $formatted = $this->groq($format_messages, array());
-                $reply = trim((string) $formatted['content']);
-                if ($reply === '') $reply = $fallback;
-            } catch (Exception $format_error) {
-                log_message('error', 'AI report formatting fallback: ' . $format_error->getMessage());
-                $reply = $fallback;
-            }
-            return $this->finish_report($session_id, $question, $report_type, $result, $reply);
-        } catch (Exception $e) {
+            $answer = $this->run_agent($question, $session_id);
+            return $this->finish_report($session_id, $question, $answer['tool'], array(), $answer['reply']);
+        } catch (Throwable $e) {
             log_message('error', 'AI widget failure: ' . $e->getMessage());
             if ($e->getMessage() === 'GROQ_RATE_LIMIT') return $this->json_error('RATE_LIMIT', 'The AI service is busy. Please wait a few seconds and try again.', 429, array('retry_after' => 10));
+            // Last resort when the AI service is unreachable: answer the common report questions straight from the database.
+            try {
+                $args = $this->infer_report_args($question);
+                if (!empty($args)) {
+                    $report_type = $args['report_type'];
+                    $result = $this->ai_widget_model->execute_school_report($args, $this->primary_role(), (int) $this->user['id']);
+                    return $this->finish_report($session_id, $question, $report_type, $result, $this->format_result_fallback($report_type, $result));
+                }
+            } catch (Throwable $fallback_error) {
+                log_message('error', 'AI widget fallback failure: ' . $fallback_error->getMessage());
+            }
             return $this->json_error('SERVER_ERROR', 'The report could not be generated right now.', 500);
         }
     }
@@ -99,17 +77,88 @@ class Ai_widget extends Admin_Controller
     public function new_session() { $this->cleanup_expired_opportunistically(); $this->respond(array('error' => false, 'session_id' => $this->ai_widget_model->new_session($this->user['id']))); }
     public function delete_session($session_id = '') { if (!$this->ai_widget_model->get_session($this->user['id'], $session_id, true)) return $this->json_error('NOT_FOUND', 'That chat could not be found.', 404); $this->ai_widget_model->soft_delete($this->user['id'], $session_id); $this->respond(array('error' => false)); }
 
-    private function groq($messages, $tools = array())
+    /**
+     * Tool-calling loop: the model may call school_report, get_database_schema and read_only_sql
+     * several times (reading each result, fixing failed queries) before it writes the final answer.
+     */
+    private function run_agent($question, $session_id)
+    {
+        @set_time_limit(120);
+        $max_steps = 6;
+        $messages = array(array('role' => 'system', 'content' => $this->agent_prompt()));
+        foreach ($this->ai_widget_model->recent_messages($this->user['id'], $session_id, 4) as $message) {
+            if (!in_array($message['role'], array('user', 'assistant'), true)) continue;
+            $messages[] = array('role' => $message['role'], 'content' => substr((string) $message['content'], 0, 700));
+        }
+        $messages[] = array('role' => 'user', 'content' => $question);
+
+        $tools = $this->ai_widget_model->agent_tool_definitions();
+        $used = array();
+        for ($step = 1; $step <= $max_steps; $step++) {
+            // On the last step no tools are offered, which forces the model to answer with what it has.
+            $offered = $step === $max_steps ? array() : $tools;
+            try {
+                $response = $this->groq($messages, $offered, 1200);
+            } catch (RuntimeException $e) {
+                if ($e->getMessage() !== 'GROQ_TOOL_FAILED') throw $e;
+                $response = $this->groq($messages, $offered, 1200); // the model produced a malformed tool call; one retry
+            }
+
+            if (empty($response['tool_calls'])) {
+                $reply = trim((string) $response['content']);
+                if ($reply === '') $reply = 'I could not find an answer for that. Please try rephrasing with a class, date or name.';
+                return array('reply' => $reply, 'tool' => empty($used) ? null : substr(implode(', ', array_keys($used)), 0, 100));
+            }
+
+            $messages[] = array('role' => 'assistant', 'content' => (string) $response['content'], 'tool_calls' => $response['tool_calls']);
+            foreach ($response['tool_calls'] as $call) {
+                $name = isset($call['function']['name']) ? (string) $call['function']['name'] : '';
+                $raw_args = isset($call['function']['arguments']) ? $call['function']['arguments'] : '{}';
+                $args = is_array($raw_args) ? $raw_args : json_decode((string) $raw_args, true);
+                if (!is_array($args)) $args = array();
+                $result = $this->run_tool($name, $args);
+                $label = $name === 'school_report' && !empty($args['report_type']) ? $name . ':' . preg_replace('/[^a-z_]/', '', strtolower((string) $args['report_type'])) : $name;
+                if (in_array($name, array('school_report', 'get_database_schema', 'read_only_sql'), true)) $used[$label] = true;
+                $json = json_encode($result, JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_UNESCAPED_UNICODE);
+                if ($json === false) $json = '{"tool_error":"Result could not be encoded"}';
+                if (strlen($json) > 5000) $json = substr($json, 0, 5000) . ' ...[truncated: more rows exist, narrow the question or use aggregates]';
+                $messages[] = array('role' => 'tool', 'tool_call_id' => isset($call['id']) ? $call['id'] : ('call_' . $step), 'content' => $json);
+            }
+        }
+        return array('reply' => 'That question needed more steps than I can take at once. Please ask for a narrower report.', 'tool' => null);
+    }
+
+    private function run_tool($name, $args)
+    {
+        $role = $this->primary_role();
+        $user_id = (int) $this->user['id'];
+        if ($name === 'school_report') return $this->ai_widget_model->execute_school_report($args, $role, $user_id);
+        if ($name === 'get_database_schema' || $name === 'read_only_sql') return $this->ai_widget_model->execute_tool_for_ai($name, $args, $role, $user_id);
+        return array('tool_error' => 'Unknown tool. Use school_report, get_database_schema or read_only_sql.');
+    }
+
+    private function agent_prompt()
+    {
+        return 'You are the School AI Assistant for the administrator of a school management system (MySQL). Today is ' . date('Y-m-d (l)') . '. The current academic session_id is ' . $this->ai_widget_model->current_session_id() . '. Money is in PKR.' . "\n"
+            . 'Answer ANY question about the school data by calling tools, then reply using only the tool results. Never invent numbers, names or records. If a tool returns nothing, say so.' . "\n"
+            . 'Tools: (1) school_report: ready-made reports; use it whenever a report type fits, and always for fees (pending_fee_summary, pending_fee_students, due_fees, fee_collection). (2) get_database_schema: no arguments lists table names; tables=[...] returns their columns; search="word" finds table names. (3) read_only_sql: one SELECT (max 50 rows) for anything else, including counts, GROUP BY totals, joins and date filters. Check real column names with get_database_schema before writing SQL for tables not listed below. If a query fails, read the error, fix it and try again.' . "\n"
+            . 'Known tables: students(id, admission_no, firstname, middlename, lastname, gender, dob, guardian_name, guardian_phone, is_active = yes/no); student_session(id, student_id, session_id, class_id, section_id) links students to classes for a session, so filter student_session.session_id = the current session_id and students.is_active = yes; classes(id, class); sections(id, section); staff(id, employee_id, name, surname, contact_no, email, is_active = 1/0); income(date, name, amount); expenses(date, name, amount); attendance_logs(admission_no, timestamp, status). Use LIKE for name searches.' . "\n"
+            . 'Fee payments are stored as JSON inside student_fees_deposite.amount_detail, so SQL cannot total them; use school_report for anything about fees paid, collected, due or pending.' . "\n"
+            . 'Reply style: plain text only (no markdown, asterisks or tables), short lines, each list item on its own line starting with "- ", amounts as PKR with thousands separators, and say when a list is limited to the first N rows. For greetings or general chat answer briefly without tools. If you cannot find the data, say so plainly and suggest a more specific question.';
+    }
+
+    private function groq($messages, $tools = array(), $min_tokens = 0)
     {
         $key = $this->config->item('groq_api_key'); if (!$key) throw new RuntimeException('MISSING_GROQ_KEY');
-        $max_tokens = (int) $this->config->item('ai_widget_max_completion_tokens'); if ($max_tokens < 1) $max_tokens = 500;
+        $max_tokens = (int) $this->config->item('ai_widget_max_completion_tokens'); if ($max_tokens < 1) $max_tokens = 500; if ($max_tokens < $min_tokens) $max_tokens = $min_tokens;
         $payload_data = array('model' => $this->config->item('groq_model'), 'messages' => $messages, 'temperature' => 0.1, 'reasoning_effort' => 'low', 'max_completion_tokens' => $max_tokens);
         if (!empty($tools)) { $payload_data['tools'] = $tools; $payload_data['tool_choice'] = 'auto'; }
         $payload = json_encode($payload_data);
         $ch = curl_init($this->config->item('groq_endpoint'));
-        curl_setopt_array($ch, array(CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_HTTPHEADER => array('Authorization: Bearer ' . $key, 'Content-Type: application/json'), CURLOPT_POSTFIELDS => $payload));
+        curl_setopt_array($ch, array(CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 25, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_HTTPHEADER => array('Authorization: Bearer ' . $key, 'Content-Type: application/json'), CURLOPT_POSTFIELDS => $payload));
         $raw = curl_exec($ch); $status = curl_getinfo($ch, CURLINFO_HTTP_CODE); $error = curl_error($ch); $errno = curl_errno($ch); curl_close($ch);
         if ($status === 429) { log_message('error', 'Groq rate limit: ' . substr((string) $raw, 0, 800)); throw new RuntimeException('GROQ_RATE_LIMIT'); }
+        if ($status === 400 && strpos((string) $raw, 'tool_use_failed') !== false) { log_message('error', 'Groq malformed tool call: ' . substr((string) $raw, 0, 600)); throw new RuntimeException('GROQ_TOOL_FAILED'); }
         if ($raw === false || $error || $status >= 400) { log_message('error', 'Groq HTTP failure: status=' . (int) $status . '; curl_errno=' . (int) $errno . '; curl_error=' . substr((string) $error, 0, 300) . '; response=' . substr((string) $raw, 0, 1200)); throw new RuntimeException('GROQ_REQUEST_FAILED'); }
         $json = json_decode($raw, true);
         if (!isset($json['choices'][0]['message'])) throw new RuntimeException('INVALID_GROQ_RESPONSE');
@@ -155,14 +204,12 @@ class Ai_widget extends Admin_Controller
         return array();
     }
 
-    private function trim_messages($messages) { $max = 6000; $total = 0; $out = array($messages[0]); for ($i = count($messages) - 1; $i >= 1; $i--) { $len = strlen(json_encode($messages[$i])); if ($total + $len > $max) break; array_splice($out, 1, 0, array($messages[$i])); $total += $len; } return $out; }
     private function cleanup_expired_opportunistically() { $this->ai_widget_model->delete_expired(); }
     private function is_student_count_question($question) { $q = strtolower(trim($question)); return (bool) (preg_match('/\b(how many|number of|count of|total(?: number)? of)\b.*\b(students?|pupils?)\b/i', $q) || preg_match('/\b(students?|pupils?)\b.*\b(total|count)\b/i', $q)); }
     private function is_pending_fee_month_question($question) { $has_fee = preg_match('/\b(pending|due|outstanding)\b.*\b(fee|fees)\b/i', $question) || preg_match('/\b(fee|fees)\b.*\b(pending|due|outstanding)\b/i', $question); return (bool) ($has_fee && preg_match('/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i', $question) && !preg_match('/\b(names?|contacts?|parents?|students?)\b/i', $question)); }
     private function is_small_talk($question) { return in_array(strtolower(trim($question)), array('hi','hello','hey','ok','okay','thanks','thank you','thx','good morning','good afternoon','good evening'), true); }
     private function question_month($question) { $months = array('january'=>1,'february'=>2,'march'=>3,'april'=>4,'may'=>5,'june'=>6,'july'=>7,'august'=>8,'september'=>9,'october'=>10,'november'=>11,'december'=>12); $q = strtolower($question); foreach ($months as $name => $number) if (strpos($q, $name) !== false) return $number; return (int) date('n'); }
     private function normalize_currency($reply) { $reply = preg_replace('/₹\s*([0-9][0-9,]*(?:\.\d+)?)/u', 'PKR $1', $reply); return preg_replace('/\bRs\.?\s*([0-9][0-9,]*(?:\.\d+)?)/i', 'PKR $1', $reply); }
-    private function system_prompt() { return 'You select one school_report tool for school-data requests. Never generate SQL or table names. For pending-fee names and parent contacts use pending_fee_students. For a monthly total use pending_fee_summary. For greetings or general conversation, answer briefly without a tool. Use only supplied filters and current date ' . date('Y-m-d') . '.'; }
     private function eligible() { $roles = isset($this->user['roles']) && is_array($this->user['roles']) ? array_keys($this->user['roles']) : array(isset($this->user['role']) ? $this->user['role'] : ''); foreach ($roles as $role) if (in_array(strtolower(trim($role)), array('admin','super admin','superadmin'), true)) return true; return false; }
     private function primary_role() { $roles = isset($this->user['roles']) && is_array($this->user['roles']) ? array_keys($this->user['roles']) : array(isset($this->user['role']) ? $this->user['role'] : ''); return (string) reset($roles); }
     private function respond($data) { $this->output->set_content_type('application/json')->set_output(json_encode($data)); }

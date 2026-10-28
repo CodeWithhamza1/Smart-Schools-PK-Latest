@@ -17,7 +17,7 @@ class Ai_widget_model extends CI_Model
             'type' => 'function',
             'function' => array(
                 'name' => 'school_report',
-                'description' => 'Select one safe school report. Never provide SQL or database table names. Report types: student_count, student_search, student_profile, attendance_summary, pending_fee_summary, pending_fee_students, due_fees, student_results, classes, sections, subjects, timetable, staff_search, staff_profile, staff_leave, homework, library_books, library_due, transport_routes, transport_vehicles, hostels, inventory_stock, income, expenses, enquiries, visitors, complaints, phone_calls, dispatch_receive, calendar_events, learning_content, notices, online_exams, syllabus_status.',
+                'description' => 'Select one safe school report. Never provide SQL or database table names. Report types: student_count, student_search, student_profile, attendance_summary, pending_fee_summary, pending_fee_students, due_fees, fee_collection, student_results, classes, sections, subjects, timetable, staff_search, staff_profile, staff_leave, homework, library_books, library_due, transport_routes, transport_vehicles, hostels, inventory_stock, income, expenses, enquiries, visitors, complaints, phone_calls, dispatch_receive, calendar_events, learning_content, notices, online_exams, syllabus_status.',
                 'parameters' => array(
                     'type' => 'object',
                     'properties' => array(
@@ -41,6 +41,28 @@ class Ai_widget_model extends CI_Model
             )
         ));
     }
+
+    /** Tools offered to the AI agent loop: ready-made reports plus schema discovery and read-only SQL. */
+    public function agent_tool_definitions()
+    {
+        $tools = $this->tool_definitions();
+        $tools[] = array('type' => 'function', 'function' => array(
+            'name' => 'get_database_schema',
+            'description' => 'Discover the school database. With no arguments returns every available table name. Pass tables to get the column names of those tables, or search to find table names containing a word (for example fee, exam, hostel).',
+            'parameters' => array('type' => 'object', 'properties' => array(
+                'tables' => array('type' => 'array', 'items' => array('type' => 'string'), 'description' => 'Up to 8 table names whose columns you need.'),
+                'search' => array('type' => 'string', 'description' => 'Word to search for in table names.')
+            ))
+        ));
+        $tools[] = array('type' => 'function', 'function' => array(
+            'name' => 'read_only_sql',
+            'description' => 'Run ONE read-only SELECT statement (JOIN, WHERE, GROUP BY, COUNT/SUM, date filters allowed; max 50 rows). Use real table and column names from get_database_schema. No comments, no semicolons, no writes.',
+            'parameters' => array('type' => 'object', 'properties' => array('sql' => array('type' => 'string', 'description' => 'One SELECT statement.')), 'required' => array('sql'))
+        ));
+        return $tools;
+    }
+
+    public function current_session_id() { return $this->current_session; }
 
     private function additional_tool_definitions()
     {
@@ -195,7 +217,7 @@ class Ai_widget_model extends CI_Model
         if ($name === 'read_only_query' && !$this->is_admin_role($role)) throw new RuntimeException('Basic query access is admin-only');
         if (!isset($allowed[$name]) || !$this->tool_allowed($allowed[$name], $role)) throw new RuntimeException('Tool not permitted');
         switch ($name) {
-            case 'get_database_schema': return $this->tool_database_schema($role);
+            case 'get_database_schema': return $this->tool_database_schema($role, $args);
             case 'read_only_sql': return $this->tool_read_only_sql($args, $role);
             case 'count_students': return $this->tool_count_students($args, $role, $user_id);
             case 'search_students': return $this->tool_search_students($args, $role, $user_id);
@@ -258,13 +280,14 @@ class Ai_widget_model extends CI_Model
             'pending_fees' => 'pending_fee_summary', 'fee_summary' => 'pending_fee_summary', 'fees_due' => 'due_fees',
             'pending_fee_report' => 'pending_fee_students', 'student_pending_fees' => 'pending_fee_students',
             'attendance' => 'attendance_summary', 'results' => 'student_results', 'staff' => 'staff_search',
-            'income_report' => 'income', 'expense_report' => 'expenses', 'library' => 'library_books'
+            'fees_collected' => 'fee_collection', 'fee_collected' => 'fee_collection', 'collection' => 'fee_collection', 'fee_collection_summary' => 'fee_collection', 'income_report' => 'income', 'expense_report' => 'expenses', 'library' => 'library_books'
         );
         if (isset($aliases[$type])) $type = $aliases[$type];
         $args += array('query' => '', 'student_id' => 0, 'admission_no' => '', 'staff_id' => 0, 'class_id' => 0, 'section_id' => 0, 'exam_id' => 0, 'category' => '');
         $args['limit'] = $this->safe_limit(isset($args['limit']) ? $args['limit'] : 25, 50);
         if (empty($args['start_date'])) $args['start_date'] = date('Y-m-d', strtotime('-30 days'));
         if (empty($args['end_date'])) $args['end_date'] = date('Y-m-d');
+        if ($type === 'fee_collection') return $this->fee_collection_summary($args['start_date'], $args['end_date'], $role, $user_id);
         if ($type === 'pending_fee_summary') return $this->pending_fee_month(!empty($args['month']) ? (int) $args['month'] : (int) date('n'), $role, $user_id);
         if ($type === 'pending_fee_students') return $this->pending_fee_students(!empty($args['months']) ? (int) $args['months'] : 2, $role, $user_id, $args['limit']);
         $map = array(
@@ -431,34 +454,123 @@ class Ai_widget_model extends CI_Model
         return $this->db->where(array('staff_id' => (int) $user_id, 'class_id' => (int) $class_id, 'section_id' => (int) $section_id, 'session_id' => $this->current_session))->count_all_results('class_teacher') > 0;
     }
 
-    private function tool_database_schema($role)
+    /** Tables the AI must never read (credentials, gateway keys, sessions, its own chat log). */
+    private function blocked_table_pattern()
+    {
+        return '/^(users?|roles|permissions?|sessions|ci_sessions|sms_config|email_config|payment_settings|sch_settings|ai_widget_.*)$/i';
+    }
+
+    private function sensitive_column($field)
+    {
+        return (bool) preg_match('/password|passcode|token|secret|api[_-]?key|auth[_-]?key|remember[_-]?code/i', $field);
+    }
+
+    private function tool_database_schema($role, $args = array())
     {
         if (!$this->is_admin_role($role)) throw new RuntimeException('Database schema access is admin-only');
-        $result = array(); $tables = $this->db->list_tables();
-        foreach ($tables as $table) {
-            $name = strtolower((string) $table); if (strpos($name, 'ai_widget_') === 0 || in_array($name, array('users','user','roles','permissions','sessions','ci_sessions'), true)) continue;
-            $fields = array(); foreach ($this->db->list_fields($table) as $field) if (!preg_match('/password|token|secret|api[_-]?key|auth[_-]?key/i', $field)) $fields[] = $field;
-            if (!empty($fields)) $result[$table] = array_slice($fields, 0, 20);
-            if (count($result) >= 50) break;
+        $available = array();
+        foreach ($this->db->list_tables() as $table) {
+            if (!preg_match($this->blocked_table_pattern(), $table)) $available[] = $table;
         }
-        return array('tables' => $result);
+
+        $wanted = isset($args['tables']) ? $args['tables'] : array();
+        if (is_string($wanted)) $wanted = preg_split('/\s*,\s*/', $wanted);
+        $wanted = is_array($wanted) ? array_slice(array_filter(array_map('strtolower', array_map('strval', $wanted))), 0, 8) : array();
+        if (!empty($wanted)) {
+            $columns = array();
+            foreach ($available as $table) {
+                if (!in_array(strtolower($table), $wanted, true)) continue;
+                $fields = array();
+                foreach ($this->db->list_fields($table) as $field) if (!$this->sensitive_column($field)) $fields[] = $field;
+                $columns[$table] = array_slice($fields, 0, 60);
+            }
+            return array('columns' => $columns, 'unknown_tables' => array_values(array_diff($wanted, array_map('strtolower', array_keys($columns)))));
+        }
+
+        $search = strtolower(trim((string) (isset($args['search']) ? $args['search'] : '')));
+        if ($search !== '') {
+            $matches = array_values(array_filter($available, function ($table) use ($search) { return strpos(strtolower($table), $search) !== false; }));
+            return array('tables' => array_slice($matches, 0, 40));
+        }
+        return array('tables' => $available);
     }
 
     private function tool_read_only_sql($a, $role)
     {
         if (!$this->is_admin_role($role)) throw new RuntimeException('Dynamic SQL access is admin-only');
         $sql = trim((string) (isset($a['sql']) ? $a['sql'] : ''));
+        $sql = rtrim($sql, "; \t\r\n");
         if ($sql === '' || strlen($sql) > 4000) throw new RuntimeException('SQL is empty or too long');
-        if (!preg_match('/^SELECT\s/i', $sql) || preg_match('/;|--|\/\*|\*\//', $sql)) throw new RuntimeException('Only one SELECT statement is allowed');
-        if (preg_match('/\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|CALL|EXEC|EXECUTE|LOAD|HANDLER|INTO\s+OUTFILE|INTO\s+DUMPFILE|SET|USE|SHOW|DESCRIBE|EXPLAIN)\b/i', $sql)) throw new RuntimeException('SQL operation is not allowed');
+        if (!preg_match('/^SELECT\s/i', $sql) || preg_match('/;|--|\/\*|\*\/|#/', $sql)) throw new RuntimeException('Only one SELECT statement is allowed, without comments or semicolons');
+        if (preg_match('/\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|CALL|EXEC|EXECUTE|LOAD|HANDLER|SET|USE|SHOW|DESCRIBE|EXPLAIN|OUTFILE|DUMPFILE|FOR\s+UPDATE|LOCK\s+IN\s+SHARE)\b/i', $sql)) throw new RuntimeException('SQL operation is not allowed');
         if (preg_match('/\b(password|passcode|token|secret|api[_-]?key|auth[_-]?key|remember[_-]?code|sleep|benchmark|load_file|extractvalue|updatexml|information_schema|performance_schema|mysql)\b/i', $sql)) throw new RuntimeException('Sensitive SQL is not allowed');
+        // Blocked tables are rejected wherever they appear (covers comma joins and subqueries too).
+        if (preg_match('/\b(users?|roles|permissions?|sessions|ci_sessions|sms_config|email_config|payment_settings|sch_settings|ai_widget_[a-z_]*)\b/i', $sql, $blocked)) throw new RuntimeException('Table ' . $blocked[1] . ' is not available for dynamic reports');
         $tables = array(); preg_match_all('/\b(?:FROM|JOIN)\s+[`]?([A-Za-z][A-Za-z0-9_]*)[`]?/i', $sql, $matches); foreach ($matches[1] as $table) $tables[strtolower($table)] = true;
         if (empty($tables)) throw new RuntimeException('A table is required');
-        foreach (array_keys($tables) as $table) { if (strpos($table, 'ai_widget_') === 0 || in_array($table, array('users','user','roles','permissions','sessions','ci_sessions'), true) || !$this->db->table_exists($table)) throw new RuntimeException('Table ' . $table . ' is not available for dynamic reports'); }
-        if (preg_match('/\blimit\s+(\d+)/i', $sql, $limit) && (int) $limit[1] > 50) throw new RuntimeException('Maximum 50 rows allowed');
-        if (!preg_match('/\blimit\s+\d+/i', $sql)) $sql .= ' LIMIT 50';
-        $query = $this->db->query($sql); if (!$query) throw new RuntimeException('Read-only query failed');
-        return array('rows' => $query->result_array(), 'row_count' => $query->num_rows());
+        foreach (array_keys($tables) as $table) { if (!$this->db->table_exists($table)) throw new RuntimeException('Table ' . $table . ' does not exist. Use get_database_schema to see the real table names'); }
+        if (preg_match_all('/\blimit\s+(\d+)/i', $sql, $limits)) { foreach ($limits[1] as $limit) if ((int) $limit > 50) throw new RuntimeException('Maximum 50 rows allowed'); }
+        else $sql .= ' LIMIT 50';
+
+        // Run inside a read-only transaction and report SQL errors back to the model so it can correct the query.
+        $previous_debug = $this->db->db_debug;
+        $this->db->db_debug = false;
+        try {
+            $this->db->query('START TRANSACTION READ ONLY');
+            $query = $this->db->query($sql);
+            if (!$query) { $error = $this->db->error(); throw new RuntimeException('SQL error: ' . substr(isset($error['message']) ? $error['message'] : 'query failed', 0, 300)); }
+            $result = array('rows' => $query->result_array(), 'row_count' => $query->num_rows());
+        } catch (RuntimeException $e) {
+            $this->finish_read_only();
+            $this->db->db_debug = $previous_debug;
+            throw $e;
+        } catch (Throwable $e) {
+            $this->finish_read_only();
+            $this->db->db_debug = $previous_debug;
+            throw new RuntimeException('SQL error: ' . substr($e->getMessage(), 0, 300));
+        }
+        $this->finish_read_only();
+        $this->db->db_debug = $previous_debug;
+        return $result;
+    }
+
+    private function finish_read_only()
+    {
+        try { $this->db->query('ROLLBACK'); } catch (Throwable $e) { log_message('error', 'AI read-only rollback: ' . $e->getMessage()); }
+    }
+
+    /** Fee money actually received between two dates (payments are JSON rows inside student_fees_deposite). */
+    public function fee_collection_summary($start, $end, $role, $user_id)
+    {
+        $start = $this->valid_date($start); $end = $this->valid_date($end);
+        if (!$start || !$end || $start > $end) return array('error' => 'Invalid date range');
+        $this->db->select('sfd.amount_detail')->from('student_fees_deposite sfd');
+        $this->db->join('student_fees_master sfm', 'sfm.id=sfd.student_fees_master_id')->join('student_session ss', 'ss.id=sfm.student_session_id');
+        $this->db->where('ss.session_id', $this->current_session);
+        $this->apply_teacher_scope($role, $user_id, 'ss.class_id', 'ss.section_id');
+        $fees = 0.0; $fine = 0.0; $payments = 0; $by_date = array();
+        foreach ($this->db->get()->result_array() as $row) {
+            $details = json_decode((string) $row['amount_detail'], true);
+            if (!is_array($details)) continue;
+            foreach ($details as $detail) {
+                if (!is_array($detail)) continue;
+                $date_value = '';
+                foreach (array('date', 'payment_date', 'paid_date', 'deposit_date', 'collection_date', 'created_at', 'date_time', 'datetime') as $key) {
+                    if (isset($detail[$key]) && $detail[$key] !== '') { $date_value = $detail[$key]; break; }
+                }
+                $ts = $date_value !== '' ? strtotime((string) $date_value) : false;
+                if ($ts === false) continue;
+                $day = date('Y-m-d', $ts);
+                if ($day < $start || $day > $end) continue;
+                $amount = (float) (isset($detail['amount']) ? $detail['amount'] : 0);
+                $line_fine = (float) (isset($detail['amount_fine']) ? $detail['amount_fine'] : 0);
+                $fees += $amount; $fine += $line_fine; $payments++;
+                $by_date[$day] = (isset($by_date[$day]) ? $by_date[$day] : 0) + $amount + $line_fine;
+            }
+        }
+        krsort($by_date);
+        foreach ($by_date as $day => $total) $by_date[$day] = round($total, 2);
+        return array('start_date' => $start, 'end_date' => $end, 'fees_collected' => round($fees, 2), 'fines_collected' => round($fine, 2), 'total_collected' => round($fees + $fine, 2), 'payments' => $payments, 'by_date_latest_first' => array_slice($by_date, 0, 31, true));
     }
 
     private function read_only_tables()
