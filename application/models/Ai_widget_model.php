@@ -17,7 +17,7 @@ class Ai_widget_model extends CI_Model
             'type' => 'function',
             'function' => array(
                 'name' => 'school_report',
-                'description' => 'Select one safe school report. Never provide SQL or database table names. Report types: current_session, student_count, students_by_class, student_search, student_profile, attendance_summary, pending_fee_total (ALL pending fees, use for "how much fee is pending"), pending_fee_summary (one month, needs month), pending_fee_students (students who owe, with parent contacts), due_fees, fee_collection (money received between start_date and end_date), student_results, classes, sections, subjects, timetable, staff_search, staff_profile, staff_leave, homework, library_books, library_due, transport_routes, transport_vehicles, hostels, inventory_stock, income, expenses, enquiries, visitors, complaints, phone_calls, dispatch_receive, calendar_events, learning_content, notices, online_exams, syllabus_status.',
+                'description' => 'Ready-made school report. report_type: current_session, student_count, students_by_class, student_search, student_profile, attendance_summary, pending_fee_total (ALL pending fees, use for "how much fee is pending"), pending_fee_summary (one month, needs month), pending_fee_students (students who owe, with parent contacts), due_fees, fee_collection (money received between start_date and end_date), student_results, classes, sections, subjects, timetable, staff_search, staff_profile, staff_leave, homework, library_books, library_due, transport_routes, transport_vehicles, hostels, inventory_stock, income, expenses, enquiries, visitors, complaints, phone_calls, dispatch_receive, calendar_events, learning_content, notices, online_exams, syllabus_status.',
                 'parameters' => array(
                     'type' => 'object',
                     'properties' => array(
@@ -48,16 +48,16 @@ class Ai_widget_model extends CI_Model
         $tools = $this->tool_definitions();
         $tools[] = array('type' => 'function', 'function' => array(
             'name' => 'get_database_schema',
-            'description' => 'Discover the school database. With no arguments returns every available table name. Pass tables (up to 12) to get their column names, or search to find table names containing a word (for example fee, exam, hostel, transport).',
+            'description' => 'No args: all table names. tables: their columns. search: table names containing a word.',
             'parameters' => array('type' => 'object', 'properties' => array(
-                'tables' => array('type' => 'array', 'items' => array('type' => 'string'), 'description' => 'Up to 12 table names whose columns you need.'),
-                'search' => array('type' => 'string', 'description' => 'Word to search for in table names.')
+                'tables' => array('type' => 'array', 'items' => array('type' => 'string')),
+                'search' => array('type' => 'string')
             ))
         ));
         $tools[] = array('type' => 'function', 'function' => array(
             'name' => 'read_only_sql',
-            'description' => 'Run ONE read-only SELECT statement against ANY table in the school database (JOIN, subqueries, UNION, WHERE, GROUP BY, COUNT/SUM/AVG, date filters, ORDER BY; max 200 rows, default 100). Use real table and column names from get_database_schema. No comments, no semicolons, no writes. Password and secret columns come back as [hidden].',
-            'parameters' => array('type' => 'object', 'properties' => array('sql' => array('type' => 'string', 'description' => 'One SELECT statement.')), 'required' => array('sql'))
+            'description' => 'One read-only SELECT on any table (joins, subqueries, GROUP BY; max 200 rows). Prefer aggregates.',
+            'parameters' => array('type' => 'object', 'properties' => array('sql' => array('type' => 'string')), 'required' => array('sql'))
         ));
         return $tools;
     }

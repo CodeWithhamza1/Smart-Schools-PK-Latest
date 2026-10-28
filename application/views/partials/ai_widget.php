@@ -307,7 +307,7 @@
     row.appendChild(el('span','ss-ai-orb sm'));
     var bubble=el('div','ss-ai-bubble'),label=el('span','ss-ai-think-text','Thinking…'),dots=el('span','ss-ai-dots');dots.innerHTML='<i></i><i></i><i></i>';
     bubble.appendChild(label);bubble.appendChild(dots);col.appendChild(bubble);row.appendChild(col);chat.appendChild(row);toBottom(true);
-    var steps=[[0,'Thinking…'],[1400,'Searching school records…'],[4200,'Crunching the numbers…'],[9000,'Writing your answer…']],timers=steps.map(function(s){return setTimeout(function(){label.textContent=s[1]},s[0])});
+    var steps=[[0,'Thinking…'],[1400,'Searching school records…'],[4200,'Crunching the numbers…'],[9000,'Writing your answer…'],[16000,'Waiting for the AI service…'],[32000,'Almost there…']],timers=steps.map(function(s){return setTimeout(function(){label.textContent=s[1]},s[0])});
     return {stop:function(){timers.forEach(clearTimeout);row.remove()}};
   }
   function showWelcome(){

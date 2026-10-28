@@ -109,11 +109,11 @@ class Ai_widget extends Admin_Controller
     private function run_agent($question, $session_id)
     {
         @set_time_limit(120);
-        $max_steps = 6;
+        $max_steps = 5;
         $system = $this->agent_prompt();
         try {
             $this->ai_knowledge_model->refresh_if_stale();
-            $hits = $this->ai_knowledge_model->search($question, 5, 2200);
+            $hits = $this->ai_knowledge_model->search($question, 4, 1200);
             if (!empty($hits)) {
                 $system .= "\n\nRelevant knowledge base entries (from the app's source code, database and what admins taught you; cite menu paths exactly):";
                 foreach ($hits as $hit) $system .= "\n[#" . $hit['id'] . ' ' . $hit['source'] . '] ' . $hit['topic'] . ': ' . $hit['content'];
@@ -124,7 +124,7 @@ class Ai_widget extends Admin_Controller
         $messages = array(array('role' => 'system', 'content' => $system));
         foreach ($this->ai_widget_model->recent_messages($this->user['id'], $session_id, 4) as $message) {
             if (!in_array($message['role'], array('user', 'assistant'), true)) continue;
-            $messages[] = array('role' => $message['role'], 'content' => substr((string) $message['content'], 0, 700));
+            $messages[] = array('role' => $message['role'], 'content' => substr((string) $message['content'], 0, 400));
         }
         $messages[] = array('role' => 'user', 'content' => $question);
 
@@ -135,10 +135,10 @@ class Ai_widget extends Admin_Controller
             // On the last step no tools are offered, which forces the model to answer with what it has.
             $offered = $step === $max_steps ? array() : $tools;
             try {
-                $response = $this->groq($messages, $offered, 900);
+                $response = $this->groq($messages, $offered, 700);
             } catch (RuntimeException $e) {
                 if ($e->getMessage() !== 'GROQ_TOOL_FAILED') throw $e;
-                $response = $this->groq($messages, $offered, 900); // the model produced a malformed tool call; one retry
+                $response = $this->groq($messages, $offered, 700); // the model produced a malformed tool call; one retry
             }
 
             if (empty($response['tool_calls'])) {
@@ -162,7 +162,7 @@ class Ai_widget extends Admin_Controller
                 if ($name === 'read_only_sql' && isset($result['rows']) && !empty($result['rows']) && !empty($args['sql'])) $working_sql = (string) $args['sql'];
                 $json = json_encode($result, JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_UNESCAPED_UNICODE);
                 if ($json === false) $json = '{"tool_error":"Result could not be encoded"}';
-                if (strlen($json) > 5000) $json = substr($json, 0, 5000) . ' ...[truncated: more rows exist, narrow the question or use aggregates]';
+                if (strlen($json) > 3000) $json = substr($json, 0, 3000) . ' ...[truncated: use aggregates or a narrower query]';
                 $messages[] = array('role' => 'tool', 'tool_call_id' => isset($call['id']) ? $call['id'] : ('call_' . $step), 'content' => $json);
             }
         }
@@ -192,21 +192,19 @@ class Ai_widget extends Admin_Controller
             return array('type' => 'function', 'function' => array('name' => $name, 'description' => $description, 'parameters' => array('type' => 'object', 'properties' => $properties, 'required' => $required)));
         };
         return array(
-            $tool('search_knowledge', 'Search the knowledge base about this school software: where every page is in the sidebar menu, what each page lets you configure (its form fields), routes, controllers, models, database tables and columns, docs, facts admins taught you, and SQL that answered earlier questions. Use it for how-to, where-is, setup and configuration questions, and before saying something does not exist.', array('query' => array('type' => 'string', 'description' => 'A few keywords, e.g. "voucher settings" or "transport route fees".')), array('query')),
-            $tool('save_knowledge', 'Remember a fact for the future. Use ONLY when the administrator explicitly teaches or corrects you (e.g. "remember that...", "note that...", "actually, ..."). One clear topic and the fact in plain words.', array('topic' => array('type' => 'string'), 'content' => array('type' => 'string')), array('topic', 'content')),
-            $tool('forget_knowledge', 'Delete a fact you were taught or a learned query, by its id (shown as #id in knowledge results), when the administrator asks you to forget it or it is wrong.', array('id' => array('type' => 'integer')), array('id'))
+            $tool('search_knowledge', 'Search knowledge about this software: sidebar menu paths, pages and their fields, settings, code, tables, docs, taught facts, learned queries.', array('query' => array('type' => 'string')), array('query')),
+            $tool('save_knowledge', 'Save a fact the admin explicitly teaches or corrects.', array('topic' => array('type' => 'string'), 'content' => array('type' => 'string')), array('topic', 'content')),
+            $tool('forget_knowledge', 'Delete a taught fact or learned query by #id.', array('id' => array('type' => 'integer')), array('id'))
         );
     }
 
     private function agent_prompt()
     {
-        return 'You are the School AI Assistant for the administrator of a school management system (MySQL). Today is ' . date('Y-m-d (l)') . '. The current academic session is ' . $this->ai_widget_model->current_session_name() . ' (session_id ' . $this->ai_widget_model->current_session_id() . '). Money is in PKR.' . "\n"
-            . 'Answer ANY question about the school data by calling tools, then reply using only the tool results. Never invent numbers, names or records. If a tool returns nothing, say so.' . "\n"
-            . 'Tools: (1) school_report: ready-made reports; use it whenever a report type fits, and always for fees: pending_fee_total (all pending fees), pending_fee_summary (one month), pending_fee_students (who owes, with parent contacts), due_fees, fee_collection (money received between two dates); and students_by_class for student counts per class. (2) get_database_schema: no arguments lists table names; tables=[...] returns their columns; search="word" finds table names. (3) read_only_sql: one SELECT (up to 200 rows) on ANY table in the database for anything else: counts, GROUP BY totals, joins across several tables, subqueries, UNION and date filters. The whole school database is available (students, parents, fees, exams, attendance, library, hostel, transport, inventory, payroll, homework, front office, certificates and so on), so never say a table does not exist before checking with get_database_schema (search="word" finds tables). Check real column names with get_database_schema before writing SQL for tables not listed below. Password and secret columns are hidden. If a query fails, read the error, fix it and try again. Prefer aggregates (COUNT, SUM, GROUP BY) over listing many rows.' . "\n"
-            . 'Known tables: students(id, admission_no, firstname, middlename, lastname, gender, dob, guardian_name, guardian_phone, is_active = yes/no); student_session(id, student_id, session_id, class_id, section_id) links students to classes for a session, so filter student_session.session_id = the current session_id and students.is_active = yes; classes(id, class); sections(id, section); sessions(id, session) = academic years, e.g. 2025-26; staff(id, employee_id, name, surname, contact_no, email, is_active = 1/0); income(date, name, amount); expenses(date, name, amount); attendance_logs(admission_no, timestamp, status). Use LIKE for name searches.' . "\n"
-            . 'Fee payments are stored as JSON inside student_fees_deposite.amount_detail, so SQL cannot total them; use school_report for anything about fees paid, collected, due or pending.' . "\n"
-            . 'You also know the software itself: a knowledge base indexes every sidebar menu path, page and its form fields, controller, model, table, doc and migration, plus facts admins taught you. For how-to, where-is, setup or configuration questions answer with the exact sidebar path (e.g. System Settings > Voucher Settings), the page URL and what can be set there, using the knowledge entries below or search_knowledge. When the administrator teaches or corrects you, call save_knowledge so you remember it next time. Never claim a feature or table does not exist without searching the knowledge base and the schema first. If a table from a migration is missing in the database, say the migration file needs to be imported.' . "\n"
-            . 'Reply style: plain text only (no markdown, asterisks or tables), short lines, each list item on its own line starting with "- ", amounts as PKR with thousands separators, and say when a list is limited to the first N rows. For greetings or general chat answer briefly without tools. If you cannot find the data, say so plainly and suggest a more specific question.';
+        return 'You are the AI assistant inside a school management system (Smart School, MySQL). Today: ' . date('Y-m-d l') . '. Current academic session: ' . $this->ai_widget_model->current_session_name() . ' (session_id ' . $this->ai_widget_model->current_session_id() . '). Money: PKR.' . "\n"
+            . 'Answer from tool results and the knowledge entries below only; never invent data. Tools: school_report (ready reports; always use it for fees), get_database_schema + read_only_sql (any table, one SELECT; check columns first; fix and retry on errors), search_knowledge (menus, pages, settings, code, taught facts), save_knowledge (only when the admin says remember/note/correct), forget_knowledge.' . "\n"
+            . 'Key tables: students(id, admission_no, firstname, lastname, guardian_name, guardian_phone, is_active yes/no), student_session(student_id, session_id, class_id, section_id), classes(id, class), sections(id, section), staff(id, name, surname, is_active 1/0), sessions(id, session), income/expenses(date, name, amount), attendance_logs(admission_no, timestamp, status). Fee payments are JSON in student_fees_deposite.amount_detail, so use school_report for fees.' . "\n"
+            . 'How-to/where/settings questions: give the exact sidebar path, page URL and fields. Never say something does not exist without searching. A table missing from a migration means that migration file must be imported.' . "\n"
+            . 'Style: plain text, no markdown or tables, short lines, list items start with "- ", PKR with thousands separators, mention when a list is cut short. Greetings: answer briefly without tools. Use as few tool calls as possible.';
     }
 
     private function groq($messages, $tools = array(), $min_tokens = 0, $attempt = 0)
@@ -216,17 +214,20 @@ class Ai_widget extends Admin_Controller
         $payload_data = array('model' => $this->config->item('groq_model'), 'messages' => $messages, 'temperature' => 0.1, 'reasoning_effort' => 'low', 'max_completion_tokens' => $max_tokens);
         if (!empty($tools)) { $payload_data['tools'] = $tools; $payload_data['tool_choice'] = 'auto'; }
         $payload = json_encode($payload_data);
+        $this->pace_groq((int) (strlen($payload) / 4) + $max_tokens);
         $response_headers = array();
         $ch = curl_init($this->config->item('groq_endpoint'));
         curl_setopt_array($ch, array(CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 25, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_HEADERFUNCTION => function ($handle, $header) use (&$response_headers) { $parts = explode(':', $header, 2); if (count($parts) === 2) $response_headers[strtolower(trim($parts[0]))] = trim($parts[1]); return strlen($header); }, CURLOPT_HTTPHEADER => array('Authorization: Bearer ' . $key, 'Content-Type: application/json'), CURLOPT_POSTFIELDS => $payload));
         $raw = curl_exec($ch); $status = curl_getinfo($ch, CURLINFO_HTTP_CODE); $error = curl_error($ch); $errno = curl_errno($ch); curl_close($ch);
+        $this->remember_groq_budget($response_headers);
         if ($status === 429) {
             log_message('error', 'Groq rate limit: ' . substr((string) $raw, 0, 800));
             $body = json_decode((string) $raw, true);
             $retry_after = isset($response_headers['retry-after']) ? (float) $response_headers['retry-after'] : 0;
             if ($retry_after <= 0 && isset($body['error']['message']) && preg_match('/try again in ([\d.]+)\s*(ms|s|m)/i', $body['error']['message'], $wait)) $retry_after = strtolower($wait[2]) === 'ms' ? $wait[1] / 1000 : (strtolower($wait[2]) === 'm' ? $wait[1] * 60 : (float) $wait[1]);
             $this->groq_rate = array('retry_after' => (int) ceil($retry_after > 0 ? $retry_after : 20), 'message' => isset($body['error']['message']) ? substr((string) $body['error']['message'], 0, 300) : '');
-            if ($attempt < 1 && $retry_after > 0 && $retry_after <= 6) { usleep((int) ($retry_after * 1000000) + 200000); return $this->groq($messages, $tools, $min_tokens, $attempt + 1); }
+            // Free-tier limits reset within seconds: wait and retry (twice) instead of failing the question.
+            if ($attempt < 2 && $retry_after > 0 && $retry_after <= 20) { usleep((int) ($retry_after * 1000000) + 200000); return $this->groq($messages, $tools, $min_tokens, $attempt + 1); }
             throw new RuntimeException('GROQ_RATE_LIMIT');
         }
         if ($status === 400 && strpos((string) $raw, 'tool_use_failed') !== false) { log_message('error', 'Groq malformed tool call: ' . substr((string) $raw, 0, 600)); throw new RuntimeException('GROQ_TOOL_FAILED'); }
@@ -237,6 +238,37 @@ class Ai_widget extends Admin_Controller
         if (!isset($json['choices'][0]['message'])) throw new RuntimeException('INVALID_GROQ_RESPONSE');
         $message = $json['choices'][0]['message'];
         return array('content' => isset($message['content']) ? $message['content'] : '', 'tool_calls' => isset($message['tool_calls']) ? $message['tool_calls'] : array());
+    }
+
+    /*
+     * Groq reports the tokens left in the current minute in response headers. Remember them (shared by all
+     * requests) and, when the next call would not fit, wait for the reset instead of triggering a 429.
+     */
+    private function groq_budget_file() { return APPPATH . 'cache/ai_groq_budget.json'; }
+
+    private function pace_groq($tokens_needed)
+    {
+        $budget = @json_decode((string) @file_get_contents($this->groq_budget_file()), true);
+        if (!is_array($budget) || empty($budget['reset_at'])) return;
+        $wait = (float) $budget['reset_at'] - microtime(true);
+        if ($wait <= 0 || (int) $budget['remaining'] >= $tokens_needed) return;
+        usleep((int) (min(20, $wait) * 1000000));
+    }
+
+    private function remember_groq_budget($headers)
+    {
+        if (!isset($headers['x-ratelimit-remaining-tokens'])) return;
+        $reset = isset($headers['x-ratelimit-reset-tokens']) ? $this->parse_duration($headers['x-ratelimit-reset-tokens']) : 0;
+        @file_put_contents($this->groq_budget_file(), json_encode(array('remaining' => (int) $headers['x-ratelimit-remaining-tokens'], 'reset_at' => microtime(true) + $reset)), LOCK_EX);
+    }
+
+    /** "7.66s", "1m2.5s" or "120ms" in seconds. */
+    private function parse_duration($text)
+    {
+        $seconds = 0.0;
+        $units = array('ms' => 0.001, 's' => 1, 'm' => 60, 'h' => 3600);
+        if (preg_match_all('/([\d.]+)(ms|s|m|h)/', (string) $text, $parts, PREG_SET_ORDER)) foreach ($parts as $part) $seconds += (float) $part[1] * $units[$part[2]];
+        return $seconds;
     }
 
     private function finish_small_talk($session_id, $question)
