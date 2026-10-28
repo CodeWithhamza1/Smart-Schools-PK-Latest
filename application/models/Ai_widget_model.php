@@ -17,7 +17,7 @@ class Ai_widget_model extends CI_Model
             'type' => 'function',
             'function' => array(
                 'name' => 'school_report',
-                'description' => 'Select one safe school report. Never provide SQL or database table names. Report types: student_count, student_search, student_profile, attendance_summary, pending_fee_summary, pending_fee_students, due_fees, fee_collection, student_results, classes, sections, subjects, timetable, staff_search, staff_profile, staff_leave, homework, library_books, library_due, transport_routes, transport_vehicles, hostels, inventory_stock, income, expenses, enquiries, visitors, complaints, phone_calls, dispatch_receive, calendar_events, learning_content, notices, online_exams, syllabus_status.',
+                'description' => 'Select one safe school report. Never provide SQL or database table names. Report types: current_session, student_count, students_by_class, student_search, student_profile, attendance_summary, pending_fee_total (ALL pending fees, use for "how much fee is pending"), pending_fee_summary (one month, needs month), pending_fee_students (students who owe, with parent contacts), due_fees, fee_collection (money received between start_date and end_date), student_results, classes, sections, subjects, timetable, staff_search, staff_profile, staff_leave, homework, library_books, library_due, transport_routes, transport_vehicles, hostels, inventory_stock, income, expenses, enquiries, visitors, complaints, phone_calls, dispatch_receive, calendar_events, learning_content, notices, online_exams, syllabus_status.',
                 'parameters' => array(
                     'type' => 'object',
                     'properties' => array(
@@ -48,21 +48,22 @@ class Ai_widget_model extends CI_Model
         $tools = $this->tool_definitions();
         $tools[] = array('type' => 'function', 'function' => array(
             'name' => 'get_database_schema',
-            'description' => 'Discover the school database. With no arguments returns every available table name. Pass tables to get the column names of those tables, or search to find table names containing a word (for example fee, exam, hostel).',
+            'description' => 'Discover the school database. With no arguments returns every available table name. Pass tables (up to 12) to get their column names, or search to find table names containing a word (for example fee, exam, hostel, transport).',
             'parameters' => array('type' => 'object', 'properties' => array(
-                'tables' => array('type' => 'array', 'items' => array('type' => 'string'), 'description' => 'Up to 8 table names whose columns you need.'),
+                'tables' => array('type' => 'array', 'items' => array('type' => 'string'), 'description' => 'Up to 12 table names whose columns you need.'),
                 'search' => array('type' => 'string', 'description' => 'Word to search for in table names.')
             ))
         ));
         $tools[] = array('type' => 'function', 'function' => array(
             'name' => 'read_only_sql',
-            'description' => 'Run ONE read-only SELECT statement (JOIN, WHERE, GROUP BY, COUNT/SUM, date filters allowed; max 50 rows). Use real table and column names from get_database_schema. No comments, no semicolons, no writes.',
+            'description' => 'Run ONE read-only SELECT statement against ANY table in the school database (JOIN, subqueries, UNION, WHERE, GROUP BY, COUNT/SUM/AVG, date filters, ORDER BY; max 200 rows, default 100). Use real table and column names from get_database_schema. No comments, no semicolons, no writes. Password and secret columns come back as [hidden].',
             'parameters' => array('type' => 'object', 'properties' => array('sql' => array('type' => 'string', 'description' => 'One SELECT statement.')), 'required' => array('sql'))
         ));
         return $tools;
     }
 
     public function current_session_id() { return $this->current_session; }
+    public function current_session_name() { return $this->setting_model->getCurrentSessionName(); }
 
     private function additional_tool_definitions()
     {
@@ -277,7 +278,8 @@ class Ai_widget_model extends CI_Model
         $type = str_replace(array('get_', 'search_', 'report_', ' '), array('', '', '', '_'), $type);
         $aliases = array(
             'students_count' => 'student_count', 'count_students' => 'student_count', 'students' => 'student_search',
-            'pending_fees' => 'pending_fee_summary', 'fee_summary' => 'pending_fee_summary', 'fees_due' => 'due_fees',
+            'pending_fees' => 'pending_fee_total', 'total_pending_fees' => 'pending_fee_total', 'fee_pending' => 'pending_fee_total', 'all_pending_fees' => 'pending_fee_total', 'fee_summary' => 'pending_fee_summary',
+            'class_wise_students' => 'students_by_class', 'students_per_class' => 'students_by_class', 'student_count_by_class' => 'students_by_class', 'fees_due' => 'due_fees',
             'pending_fee_report' => 'pending_fee_students', 'student_pending_fees' => 'pending_fee_students',
             'attendance' => 'attendance_summary', 'results' => 'student_results', 'staff' => 'staff_search',
             'fees_collected' => 'fee_collection', 'fee_collected' => 'fee_collection', 'collection' => 'fee_collection', 'fee_collection_summary' => 'fee_collection', 'income_report' => 'income', 'expense_report' => 'expenses', 'library' => 'library_books'
@@ -287,6 +289,9 @@ class Ai_widget_model extends CI_Model
         $args['limit'] = $this->safe_limit(isset($args['limit']) ? $args['limit'] : 25, 50);
         if (empty($args['start_date'])) $args['start_date'] = date('Y-m-d', strtotime('-30 days'));
         if (empty($args['end_date'])) $args['end_date'] = date('Y-m-d');
+        if ($type === 'current_session') return array('session' => $this->setting_model->getCurrentSessionName(), 'session_id' => $this->current_session);
+        if ($type === 'students_by_class') return $this->students_by_class($role, $user_id);
+        if ($type === 'pending_fee_total') return $this->pending_fee_total($role, $user_id);
         if ($type === 'fee_collection') return $this->fee_collection_summary($args['start_date'], $args['end_date'], $role, $user_id);
         if ($type === 'pending_fee_summary') return $this->pending_fee_month(!empty($args['month']) ? (int) $args['month'] : (int) date('n'), $role, $user_id);
         if ($type === 'pending_fee_students') return $this->pending_fee_students(!empty($args['months']) ? (int) $args['months'] : 2, $role, $user_id, $args['limit']);
@@ -378,6 +383,56 @@ class Ai_widget_model extends CI_Model
         return array('month' => $month, 'total_pending' => round($total, 2), 'fee_items' => count($groups));
     }
 
+    /** Active students per class (and section) for the current session. */
+    public function students_by_class($role, $user_id)
+    {
+        $this->db->select('c.id AS class_id, c.class, sec.section, COUNT(DISTINCT s.id) AS students', false)->from('students s');
+        $this->db->join('student_session ss', 'ss.student_id=s.id')->join('classes c', 'c.id=ss.class_id')->join('sections sec', 'sec.id=ss.section_id');
+        $this->db->where(array('ss.session_id' => $this->current_session, 's.is_active' => 'yes'));
+        $this->apply_teacher_scope($role, $user_id, 'ss.class_id', 'ss.section_id');
+        $rows = $this->db->group_by(array('c.id', 'c.class', 'sec.id', 'sec.section'))->order_by('c.id', 'ASC')->order_by('sec.id', 'ASC')->get()->result_array();
+        $classes = array(); $total = 0;
+        foreach ($rows as $row) {
+            $id = (int) $row['class_id'];
+            if (!isset($classes[$id])) $classes[$id] = array('class' => $row['class'], 'students' => 0, 'sections' => array());
+            $classes[$id]['students'] += (int) $row['students'];
+            $classes[$id]['sections'][] = $row['section'] . ': ' . (int) $row['students'];
+            $total += (int) $row['students'];
+        }
+        $out = array();
+        foreach ($classes as $class) $out[] = array('class' => $class['class'], 'students' => $class['students'], 'sections' => implode(', ', $class['sections']));
+        return array('total_students' => $total, 'rows' => $out, 'session_id' => $this->current_session);
+    }
+
+    /** Everything still owed (due - paid - discount) across all fee items generated for the current session. */
+    public function pending_fee_total($role, $user_id)
+    {
+        $this->db->select('sfm.id AS fee_master_id,fg.id AS fee_item_id,fg.amount,fg.clnd_month,sfd.amount_detail')->from('student_fees_master sfm');
+        $this->db->join('student_session ss', 'ss.id=sfm.student_session_id')->join('students s', 's.id=ss.student_id')->join('fee_groups_feetype fg', 'fg.fee_session_group_id=sfm.fee_session_group_id', 'inner')->join('student_fees_deposite sfd', 'sfd.student_fees_master_id=sfm.id AND sfd.fee_groups_feetype_id=fg.id', 'left');
+        $this->db->where(array('ss.session_id' => $this->current_session, 's.is_active' => 'yes'));
+        $this->apply_teacher_scope($role, $user_id, 'ss.class_id', 'ss.section_id');
+        $items = array();
+        foreach ($this->db->get()->result_array() as $row) {
+            $key = $row['fee_master_id'] . ':' . $row['fee_item_id'];
+            if (!isset($items[$key])) $items[$key] = array('month' => (int) $row['clnd_month'], 'due' => (float) $row['amount'], 'paid' => 0.0);
+            if (!empty($row['amount_detail'])) {
+                $details = json_decode($row['amount_detail'], true);
+                if (is_array($details)) foreach ($details as $detail) if (is_array($detail)) $items[$key]['paid'] += (float) (isset($detail['amount']) ? $detail['amount'] : 0) + (float) (isset($detail['amount_discount']) ? $detail['amount_discount'] : 0);
+            }
+        }
+        $total = 0.0; $count = 0; $months = array();
+        foreach ($items as $item) {
+            $pending = $item['due'] - $item['paid'];
+            if ($pending <= 0) continue;
+            $total += $pending; $count++;
+            $months[$item['month']] = (isset($months[$item['month']]) ? $months[$item['month']] : 0) + $pending;
+        }
+        ksort($months);
+        $by_month = array();
+        foreach ($months as $number => $amount) $by_month[] = array('month' => $number >= 1 && $number <= 12 ? date('F', mktime(0, 0, 0, $number, 1)) : 'Other / no month', 'pending' => round($amount, 2));
+        return array('total_pending' => round($total, 2), 'fee_items_with_balance' => $count, 'by_month' => $by_month, 'session_id' => $this->current_session);
+    }
+
     public function pending_fee_students($months, $role, $user_id, $limit = 25)
     {
         $months = max(1, min(12, (int) $months)); $month_numbers = array(); $month_names = array();
@@ -410,11 +465,10 @@ class Ai_widget_model extends CI_Model
     private function tool_search_staff($a)
     {
         $q = trim(substr((string) (isset($a['query']) ? $a['query'] : ''), 0, 100));
-        if ($q === '') return array();
         $this->db->select('staff.id,staff.employee_id,staff.name,staff.surname,staff.contact_no,staff.email,staff_designation.designation,department.department_name as department,roles.name as role')->from('staff');
         $this->db->join('staff_designation', 'staff_designation.id=staff.designation', 'left')->join('department', 'department.id=staff.department', 'left')->join('staff_roles', 'staff_roles.staff_id=staff.id', 'left')->join('roles', 'roles.id=staff_roles.role_id', 'left')->where('staff.is_active', 1);
-        $this->db->group_start()->like('staff.name', $q)->or_like('staff.surname', $q)->or_like('staff.employee_id', $q)->or_like('staff.email', $q)->group_end();
-        return $this->db->limit($this->safe_limit(isset($a['limit']) ? $a['limit'] : 20, 50))->get()->result_array();
+        if ($q !== '') $this->db->group_start()->like('staff.name', $q)->or_like('staff.surname', $q)->or_like('staff.employee_id', $q)->or_like('staff.email', $q)->group_end();
+        return $this->db->order_by('staff.name', 'ASC')->limit($this->safe_limit(isset($a['limit']) ? $a['limit'] : 20, 50))->get()->result_array();
     }
 
     private function tool_staff_profile($a)
@@ -454,15 +508,35 @@ class Ai_widget_model extends CI_Model
         return $this->db->where(array('staff_id' => (int) $user_id, 'class_id' => (int) $class_id, 'section_id' => (int) $section_id, 'session_id' => $this->current_session))->count_all_results('class_teacher') > 0;
     }
 
-    /** Tables the AI must never read (credentials, gateway keys, sessions, its own chat log). */
-    private function blocked_table_pattern()
+    /**
+     * Tables hidden from the AI. Everything else in the database can be read. Override with
+     * $config['ai_widget_blocked_tables'] (array of names, "*" allowed as a wildcard); an empty array blocks nothing.
+     */
+    private function blocked_table_names()
     {
-        return '/^(users?|roles|permissions?|sessions|ci_sessions|sms_config|email_config|payment_settings|sch_settings|ai_widget_.*)$/i';
+        $configured = $this->config->item('ai_widget_blocked_tables');
+        if (is_array($configured)) return array_values(array_filter(array_map('strval', $configured)));
+        return array('ci_sessions', 'email_config', 'sms_config', 'payment_settings', 'ai_widget_*');
     }
 
+    /** Regex fragment (no delimiters) matching any blocked table name, or null when nothing is blocked. */
+    private function blocked_table_fragment()
+    {
+        $parts = array();
+        foreach ($this->blocked_table_names() as $name) $parts[] = str_replace('\*', '[a-z0-9_]*', preg_quote(strtolower($name), '/'));
+        return empty($parts) ? null : '(' . implode('|', $parts) . ')';
+    }
+
+    private function table_blocked($table)
+    {
+        $fragment = $this->blocked_table_fragment();
+        return $fragment !== null && (bool) preg_match('/^' . $fragment . '$/i', (string) $table);
+    }
+
+    /** Columns holding credentials. They are never listed to the AI and are masked in any query result. */
     private function sensitive_column($field)
     {
-        return (bool) preg_match('/password|passcode|token|secret|api[_-]?key|auth[_-]?key|remember[_-]?code/i', $field);
+        return (bool) preg_match('/password|passcode|(^|_)pass(_|$)|token|secret|api[_-]?key|auth[_-]?key|remember[_-]?code|salt|otp[_-]?code|card[_-]?(no|number)|cvv/i', (string) $field);
     }
 
     private function tool_database_schema($role, $args = array())
@@ -470,19 +544,19 @@ class Ai_widget_model extends CI_Model
         if (!$this->is_admin_role($role)) throw new RuntimeException('Database schema access is admin-only');
         $available = array();
         foreach ($this->db->list_tables() as $table) {
-            if (!preg_match($this->blocked_table_pattern(), $table)) $available[] = $table;
+            if (!$this->table_blocked($table)) $available[] = $table;
         }
 
         $wanted = isset($args['tables']) ? $args['tables'] : array();
         if (is_string($wanted)) $wanted = preg_split('/\s*,\s*/', $wanted);
-        $wanted = is_array($wanted) ? array_slice(array_filter(array_map('strtolower', array_map('strval', $wanted))), 0, 8) : array();
+        $wanted = is_array($wanted) ? array_slice(array_filter(array_map('strtolower', array_map('strval', $wanted))), 0, 12) : array();
         if (!empty($wanted)) {
             $columns = array();
             foreach ($available as $table) {
                 if (!in_array(strtolower($table), $wanted, true)) continue;
                 $fields = array();
                 foreach ($this->db->list_fields($table) as $field) if (!$this->sensitive_column($field)) $fields[] = $field;
-                $columns[$table] = array_slice($fields, 0, 60);
+                $columns[$table] = array_slice($fields, 0, 120);
             }
             return array('columns' => $columns, 'unknown_tables' => array_values(array_diff($wanted, array_map('strtolower', array_keys($columns)))));
         }
@@ -490,7 +564,7 @@ class Ai_widget_model extends CI_Model
         $search = strtolower(trim((string) (isset($args['search']) ? $args['search'] : '')));
         if ($search !== '') {
             $matches = array_values(array_filter($available, function ($table) use ($search) { return strpos(strtolower($table), $search) !== false; }));
-            return array('tables' => array_slice($matches, 0, 40));
+            return array('tables' => array_slice($matches, 0, 60));
         }
         return array('tables' => $available);
     }
@@ -500,17 +574,19 @@ class Ai_widget_model extends CI_Model
         if (!$this->is_admin_role($role)) throw new RuntimeException('Dynamic SQL access is admin-only');
         $sql = trim((string) (isset($a['sql']) ? $a['sql'] : ''));
         $sql = rtrim($sql, "; \t\r\n");
-        if ($sql === '' || strlen($sql) > 4000) throw new RuntimeException('SQL is empty or too long');
+        if ($sql === '' || strlen($sql) > 6000) throw new RuntimeException('SQL is empty or too long');
         if (!preg_match('/^SELECT\s/i', $sql) || preg_match('/;|--|\/\*|\*\/|#/', $sql)) throw new RuntimeException('Only one SELECT statement is allowed, without comments or semicolons');
-        if (preg_match('/\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|CALL|EXEC|EXECUTE|LOAD|HANDLER|SET|USE|SHOW|DESCRIBE|EXPLAIN|OUTFILE|DUMPFILE|FOR\s+UPDATE|LOCK\s+IN\s+SHARE)\b/i', $sql)) throw new RuntimeException('SQL operation is not allowed');
+        // Writes, DDL and server-level statements. REPLACE( is allowed because it is also a harmless string function.
+        if (preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|CALL|EXEC|EXECUTE|LOAD|HANDLER|SET|USE|SHOW|DESCRIBE|EXPLAIN|OUTFILE|DUMPFILE|FOR\s+UPDATE|LOCK\s+IN\s+SHARE)\b|\bREPLACE\b(?!\s*\()/i', $sql)) throw new RuntimeException('SQL operation is not allowed');
         if (preg_match('/\b(password|passcode|token|secret|api[_-]?key|auth[_-]?key|remember[_-]?code|sleep|benchmark|load_file|extractvalue|updatexml|information_schema|performance_schema|mysql)\b/i', $sql)) throw new RuntimeException('Sensitive SQL is not allowed');
         // Blocked tables are rejected wherever they appear (covers comma joins and subqueries too).
-        if (preg_match('/\b(users?|roles|permissions?|sessions|ci_sessions|sms_config|email_config|payment_settings|sch_settings|ai_widget_[a-z_]*)\b/i', $sql, $blocked)) throw new RuntimeException('Table ' . $blocked[1] . ' is not available for dynamic reports');
+        $fragment = $this->blocked_table_fragment();
+        if ($fragment !== null && preg_match('/\b' . $fragment . '\b/i', $sql, $blocked)) throw new RuntimeException('Table ' . $blocked[1] . ' is not available to the assistant');
         $tables = array(); preg_match_all('/\b(?:FROM|JOIN)\s+[`]?([A-Za-z][A-Za-z0-9_]*)[`]?/i', $sql, $matches); foreach ($matches[1] as $table) $tables[strtolower($table)] = true;
         if (empty($tables)) throw new RuntimeException('A table is required');
         foreach (array_keys($tables) as $table) { if (!$this->db->table_exists($table)) throw new RuntimeException('Table ' . $table . ' does not exist. Use get_database_schema to see the real table names'); }
-        if (preg_match_all('/\blimit\s+(\d+)/i', $sql, $limits)) { foreach ($limits[1] as $limit) if ((int) $limit > 50) throw new RuntimeException('Maximum 50 rows allowed'); }
-        else $sql .= ' LIMIT 50';
+        if (preg_match_all('/\blimit\s+(\d+)/i', $sql, $limits)) { foreach ($limits[1] as $limit) if ((int) $limit > 200) throw new RuntimeException('Maximum 200 rows allowed'); }
+        else $sql .= ' LIMIT 100';
 
         // Run inside a read-only transaction and report SQL errors back to the model so it can correct the query.
         $previous_debug = $this->db->db_debug;
@@ -519,7 +595,9 @@ class Ai_widget_model extends CI_Model
             $this->db->query('START TRANSACTION READ ONLY');
             $query = $this->db->query($sql);
             if (!$query) { $error = $this->db->error(); throw new RuntimeException('SQL error: ' . substr(isset($error['message']) ? $error['message'] : 'query failed', 0, 300)); }
-            $result = array('rows' => $query->result_array(), 'row_count' => $query->num_rows());
+            $rows = $query->result_array();
+            foreach ($rows as $index => $row) foreach ($row as $column => $value) if ($this->sensitive_column($column)) $rows[$index][$column] = '[hidden]';
+            $result = array('rows' => $rows, 'row_count' => $query->num_rows());
         } catch (RuntimeException $e) {
             $this->finish_read_only();
             $this->db->db_debug = $previous_debug;

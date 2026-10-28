@@ -23,4 +23,18 @@ The assistant runs a short tool-calling loop (up to 6 model calls per question).
 - `get_database_schema` - lists table names, searches them, or returns the columns of up to 8 tables.
 - `read_only_sql` - one SELECT (joins, GROUP BY, totals, date filters; max 50 rows) for anything the reports do not cover. If the query fails, the database error is returned to the model so it can correct the query.
 
-`read_only_sql` is admin-only and is guarded on the server: a single SELECT only, no comments or semicolons, no write/DDL keywords, no credential-like columns, and it cannot touch `users`, `roles`, `permissions`, sessions, `sms_config`, `email_config`, `payment_settings`, `sch_settings` or the `ai_widget_*` tables (checked anywhere in the statement, including comma joins and subqueries). It runs inside a read-only transaction that is always rolled back. If the AI service itself is unreachable, common questions (pending fees, attendance, staff and student lookups, income, expenses) are still answered directly from the database.
+`read_only_sql` is admin-only and works on **any table** in the database: one SELECT per call (joins, subqueries, UNION, GROUP BY, totals, date filters), up to 200 rows (100 by default). It is guarded on the server: a single SELECT only, no comments or semicolons, no write/DDL/server statements, and it runs inside a read-only transaction that is always rolled back.
+
+Because query results are sent to the AI provider, credentials are protected:
+- Columns that look like credentials (password, token, secret, api key, auth key, salt, OTP code, card number...) are never listed and come back as `[hidden]`; SQL that names them is rejected.
+- These tables are hidden from the assistant: `ci_sessions`, `email_config`, `sms_config`, `payment_settings` and `ai_widget_*`. Change this with `$config['ai_widget_blocked_tables'] = array('ci_sessions', 'email_config', ...);` in `application/config/groq.php` (`*` works as a wildcard; an empty array hides nothing).
+
+If the AI service itself is unreachable, common questions (pending fees, attendance, staff and student lookups, income, expenses) are still answered directly from the database.
+
+## Answers that do not need the AI service
+
+Common questions are answered straight from the database before the AI is called (instant, no tokens, and they keep working if the Groq key is wrong or Groq is unreachable): total students, students per class, pending fees (total, or for one month), fees collected for a date range (today, yesterday, this/last week or month, a month name), and greetings. If the AI call fails, the assistant also tries to answer attendance, staff, income and expense questions directly, marked "Direct report - AI offline". Questions that filter by class or section are never answered that way, because the direct reports cannot filter.
+
+## Troubleshooting
+
+If the widget says the AI service rejected the key (HTTP 401), create a new key at console.groq.com and set it in `application/config/groq.php` (`$config['groq_api_key']`) or in the `GROQ_API_KEY` environment variable, which takes priority. If it says the server could not reach the AI service, check internet access and the `curl.cainfo` certificate bundle in php.ini. The exact reason is also written to `application/logs/` (`Groq rejected the API key`, `Groq network failure`, `Groq HTTP failure`).
