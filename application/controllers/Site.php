@@ -16,6 +16,7 @@ class Site extends Public_Controller
         }
 
         $this->load->model("staff_model");
+        $this->load->model("login_attempt_model");
         $this->load->library('Auth');
         $this->load->library('Enc_lib');
         $this->load->library('customlib');
@@ -397,6 +398,26 @@ class Site extends Public_Controller
         return true;
     }
 
+    private function login_locked_message($seconds)
+    {
+        $this->output->set_status_header(429);
+        $this->output->set_header('Retry-After: ' . $seconds);
+        $message = $this->lang->line('too_many_login_attempts');
+        if (empty($message)) {
+            $message = 'Too many failed login attempts. Please try again in %d minute(s).';
+        }
+        return sprintf($message, (int) ceil($seconds / 60));
+    }
+
+    // Renders the login page with the form disabled; the view counts down and reloads when the lock ends.
+    private function show_locked_login($view, $data, $seconds)
+    {
+        $data['error_message'] = $this->login_locked_message($seconds);
+        $data['locked_for']    = $seconds;
+        $data['captcha_image'] = '';
+        $this->load->view($view, $data);
+    }
+
     private function check_installation()
     {
         if ($this->uri->segment(1) !== 'install') {
@@ -442,6 +463,13 @@ class Site extends Public_Controller
         $data['school']     = $school[0];
         $is_captcha         = $this->captchalib->is_captcha('login');
         $data["is_captcha"] = $is_captcha;
+
+        $locked_for = $this->login_attempt_model->client_seconds_locked('staff');
+        if ($locked_for > 0) {
+            $this->show_locked_login('admin/login', $data, $locked_for);
+            return;
+        }
+
         if ($this->captchalib->is_captcha('login')) {
             $this->form_validation->set_rules('captcha', $this->lang->line('captcha'), 'trim|required|callback_check_captcha');
         }
@@ -458,8 +486,25 @@ class Site extends Public_Controller
                 'password' => $this->input->post('password'),
             );
             $data['captcha_image'] = $this->captchalib->generate_captcha()['image'];
+
+            $locked_for = $this->login_attempt_model->seconds_locked('staff', $login_post['email']);
+            if ($locked_for > 0) {
+                $this->show_locked_login('admin/login', $data, $locked_for);
+                return;
+            }
+
             $setting_result        = $this->setting_model->get();
             $result                = $this->staff_model->checkLogin($login_post);
+            if ($result) {
+                $this->login_attempt_model->record_success('staff', $login_post['email']);
+            } else {
+                $this->login_attempt_model->record_failure('staff', $login_post['email']);
+                $locked_for = $this->login_attempt_model->client_seconds_locked('staff');
+                if ($locked_for > 0) {
+                    $this->show_locked_login('admin/login', $data, $locked_for);
+                    return;
+                }
+            }
 
             if (!empty($result->language_id)) {
                 $lang_array = array('lang_id' => $result->language_id, 'language' => $result->language);
@@ -810,6 +855,13 @@ class Site extends Public_Controller
         $data['school']     = $school[0];
         $is_captcha         = $this->captchalib->is_captcha('userlogin');
         $data["is_captcha"] = $is_captcha;
+
+        $locked_for = $this->login_attempt_model->client_seconds_locked('user');
+        if ($locked_for > 0) {
+            $this->show_locked_login('userlogin', $data, $locked_for);
+            return;
+        }
+
         if ($is_captcha) {
             $this->form_validation->set_rules('captcha', $this->lang->line('captcha'), 'trim|required|callback_check_captcha');
         }
@@ -824,7 +876,24 @@ class Site extends Public_Controller
                 'password' => $this->input->post('password'),
             );
             $data['captcha_image'] = $this->captchalib->generate_captcha()['image'];
+
+            $locked_for = $this->login_attempt_model->seconds_locked('user', $login_post['username']);
+            if ($locked_for > 0) {
+                $this->show_locked_login('userlogin', $data, $locked_for);
+                return;
+            }
+
             $login_details         = $this->user_model->checkLogin($login_post);
+            if (!empty($login_details)) {
+                $this->login_attempt_model->record_success('user', $login_post['username']);
+            } else {
+                $this->login_attempt_model->record_failure('user', $login_post['username']);
+                $locked_for = $this->login_attempt_model->client_seconds_locked('user');
+                if ($locked_for > 0) {
+                    $this->show_locked_login('userlogin', $data, $locked_for);
+                    return;
+                }
+            }
 
             if (isset($login_details) && !empty($login_details)) {
                 $user = $login_details[0];

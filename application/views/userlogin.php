@@ -151,6 +151,10 @@
             margin-top: 8px;
         }
         .btn-submit:hover { opacity: 0.95; }
+        .login-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+        .login-fields[disabled] { opacity: 0.55; pointer-events: none; user-select: none; }
+        .login-fields[disabled] .btn-submit { cursor: not-allowed; background: #8a9bb3; }
+        .lock-countdown { display: block; margin-top: 6px; font-weight: 600; }
         .forgot-link {
             display: inline-block;
             margin-top: 14px;
@@ -222,7 +226,11 @@
             <p class="panel-subtitle">Use your credentials to access your portal.</p>
 
             <?php if (isset($error_message)) { ?>
-                <div class="alert alert-danger"><?php echo $error_message; ?></div>
+                <div class="alert alert-danger"><?php echo $error_message; ?>
+                    <?php if (!empty($locked_for)) { ?>
+                        <span class="lock-countdown">Sign-in is disabled. Time remaining: <span id="lock_countdown" data-seconds="<?php echo (int) $locked_for; ?>"><?php echo sprintf('%02d:%02d', floor($locked_for / 60), $locked_for % 60); ?></span></span>
+                    <?php } ?>
+                </div>
             <?php } ?>
             <?php if ($this->session->flashdata('message')) { ?>
                 <div class="alert alert-success"><?php echo $this->session->flashdata('message'); ?></div>
@@ -233,6 +241,7 @@
 
             <form action="<?php echo site_url('site/userlogin') ?>" method="post" autocomplete="off">
                 <?php echo $this->customlib->getCSRF(); ?>
+                <fieldset class="login-fields" <?php echo !empty($locked_for) ? 'disabled aria-disabled="true"' : ''; ?>>
                 <div class="input-wrap">
                     <i class="fa fa-envelope"></i>
                     <input type="text" name="username" placeholder="<?php echo $this->lang->line('username'); ?>" value="<?php echo set_value('username') ?>" class="form-control">
@@ -248,7 +257,7 @@
                     <span>Remember me</span>
                 </label>
 
-                <?php if ($is_captcha) { ?>
+                <?php if ($is_captcha && empty($locked_for)) { ?>
                     <div class="captcha-row">
                         <div class="captcha-box">
                             <span id="captcha_image"><?php echo $captcha_image; ?></span>
@@ -262,6 +271,7 @@
                 <?php } ?>
 
                 <button type="submit" class="btn-submit"><?php echo $this->lang->line('sign_in'); ?></button>
+                </fieldset>
             </form>
 
             <a href="<?php echo site_url('site/ufpassword') ?>" class="forgot-link">
@@ -315,6 +325,23 @@
             }
         });
     }
+
+    // Lockout countdown. This is only a display: the server refuses every sign-in from this client until the
+    // lock ends, even if the form is re-enabled in dev tools. When it reaches zero the page reloads and the
+    // server decides whether the form comes back.
+    (function () {
+        var el = document.getElementById('lock_countdown');
+        if (!el) return;
+        var endsAt = Date.now() + parseInt(el.getAttribute('data-seconds'), 10) * 1000;
+        var timer = setInterval(function () {
+            var left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+            el.textContent = ('0' + Math.floor(left / 60)).slice(-2) + ':' + ('0' + (left % 60)).slice(-2);
+            if (left === 0) {
+                clearInterval(timer);
+                window.location.replace(window.location.pathname);
+            }
+        }, 1000);
+    })();
 </script>
 </body>
 </html>

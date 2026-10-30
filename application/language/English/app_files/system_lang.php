@@ -1728,3 +1728,4 @@ $lang['net_profit_loss'] = "Net Profit/Loss";
 $lang['information'] = "Information";
 $lang['print_report'] = "Print Report";
 $lang['save_pdf'] = "Save PDF";
+$lang['too_many_login_attempts'] = "Too many failed login attempts. Please try again in %d minute(s).";
